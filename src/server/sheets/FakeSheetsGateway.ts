@@ -17,6 +17,15 @@ export interface FakeGatewayOptions {
   spreadsheetId: string;
   timeZone?: string;
   activeUserEmail?: string | null;
+  /** The sheet a menu click would act on. Unset means no active sheet. */
+  activeSheetName?: string | null;
+}
+
+/** Where `activateCell` last put the cursor, for tests to assert on. */
+export interface ActivatedCell {
+  sheetName: string;
+  row: number;
+  column: number;
 }
 
 export interface LoadSheetOptions {
@@ -123,11 +132,14 @@ export class FakeSheetsGateway implements SheetsGateway {
   private lastBatchUpdate: SheetsBatchUpdateRequest | null = null;
   private readonly lockState: { holder: FakeDocumentLock | null } = { holder: null };
   private readonly hiddenColumns = new Set<string>();
+  private activeSheetName: string | null = null;
+  private lastActivatedCell: ActivatedCell | null = null;
 
   constructor(options: FakeGatewayOptions) {
     this.spreadsheetId = options.spreadsheetId;
     this.timeZone = options.timeZone ?? "America/New_York";
     this.activeUserEmail = options.activeUserEmail ?? null;
+    this.activeSheetName = options.activeSheetName ?? null;
   }
 
   loadSheet(name: string, options: LoadSheetOptions): SheetInfo {
@@ -183,6 +195,16 @@ export class FakeSheetsGateway implements SheetsGateway {
   getSheetByName(name: string): SheetInfo | null {
     const sheet = this.sheets.get(name);
     return sheet ? { ...sheet.info } : null;
+  }
+
+  getActiveSheetName(): string | null {
+    return this.activeSheetName;
+  }
+
+  /** Test hook: put the user on a sheet, as clicking its tab would. */
+  setActiveSheet(name: string | null): void {
+    if (name !== null) this.require(name);
+    this.activeSheetName = name;
   }
 
   insertSheet(title: string, options?: InsertSheetOptions): SheetInfo {
@@ -335,5 +357,19 @@ export class FakeSheetsGateway implements SheetsGateway {
 
   isColumnHidden(sheetName: string, columnIndex: number): boolean {
     return this.hiddenColumns.has(`${sheetName}:${columnIndex}`);
+  }
+
+  activateCell(sheetName: string, row: number, column: number): void {
+    const sheet = this.require(sheetName);
+    if (row < 1 || column < 1) {
+      throw new Error(`Cell out of range: ${sheetName}!${row}:${column}`);
+    }
+    this.activeSheetName = sheet.info.title;
+    this.lastActivatedCell = { sheetName: sheet.info.title, row, column };
+  }
+
+  /** Test hook: the cell `activateCell` last selected. */
+  activatedCell(): ActivatedCell | null {
+    return this.lastActivatedCell ? { ...this.lastActivatedCell } : null;
   }
 }

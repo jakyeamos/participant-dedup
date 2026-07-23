@@ -43,7 +43,8 @@ function num(value: CellValue | undefined): number {
   return Number(value ?? 0) || 0;
 }
 
-function stateFromBatch(batch: BatchRecord): ScanState {
+/** The scan state a batch row represents — what §21.2 shows for an active scan. */
+export function stateFromBatch(batch: BatchRecord): ScanState {
   const state: ScanState = {
     batchId: String(batch.batchId),
     status: String(batch.status) as BatchStatus,

@@ -112,6 +112,8 @@ export interface SheetsGateway {
 
   listSheets(): SheetInfo[];
   getSheetByName(name: string): SheetInfo | null;
+  /** The sheet the user is looking at — what §6.1 `Scan Active Sheet` means. */
+  getActiveSheetName(): string | null;
   insertSheet(title: string, options?: InsertSheetOptions): SheetInfo;
   hideSheet(name: string): void;
 
@@ -138,4 +140,9 @@ export interface SheetsGateway {
   getGridSize(sheetName: string): { rowCount: number; columnCount: number };
   /** Hide a single zero-based column in a sheet (maps to `hideColumns`). */
   hideColumn(sheetName: string, columnIndex: number): void;
+  /**
+   * §21.7 Move the cursor to one cell, both 1-based. The sidebar follows this
+   * with `google.script.host.editor.focus()` so the row is actually on screen.
+   */
+  activateCell(sheetName: string, row: number, column: number): void;
 }

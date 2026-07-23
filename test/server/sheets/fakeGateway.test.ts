@@ -188,4 +188,19 @@ describe("FakeSheetsGateway", () => {
     const third = g.getDocumentLock();
     expect(() => third.acquire(1000)).not.toThrow();
   });
+  it("tracks which sheet is active and where the cursor was put", () => {
+    const g = new FakeSheetsGateway({ spreadsheetId: "SS1" });
+    g.loadSheet("Participants", { values: [["a"], ["b"], ["c"]] });
+    expect(g.getActiveSheetName()).toBeNull();
+    expect(g.activatedCell()).toBeNull();
+
+    g.setActiveSheet("Participants");
+    expect(g.getActiveSheetName()).toBe("Participants");
+
+    g.activateCell("Participants", 3, 1);
+    expect(g.activatedCell()).toEqual({ sheetName: "Participants", row: 3, column: 1 });
+
+    expect(() => g.activateCell("Nope", 1, 1)).toThrow();
+    expect(() => g.activateCell("Participants", 0, 1)).toThrow();
+  });
 });

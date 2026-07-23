@@ -53,6 +53,47 @@ const SAFE_MESSAGES: Record<DedupErrorCode, string> = {
   INTERNAL: "An unexpected error occurred.",
 };
 
+/**
+ * §6.2 Whether repeating the same call unchanged could succeed. Only contention
+ * and unexpected failures qualify: every other code names a condition the
+ * reviewer has to change first — a decision, a reload, a re-scan — so an
+ * identical retry would fail identically and the sidebar should not offer one.
+ *
+ * INTERNAL is retryable because a transient Sheets or Apps Script failure
+ * reaches us as an unknown throw, and every mutation is guarded by either the
+ * document lock or a replay check (DUPLICATE_APPLY, the apply challenge token),
+ * so repeating one cannot double-apply.
+ */
+const RETRYABLE: Record<DedupErrorCode, boolean> = {
+  HEADER_AMBIGUOUS: false,
+  MISSING_REQUIRED_HEADERS: false,
+  DUPLICATE_HEADERS: false,
+  DUPLICATE_DEDUP_ID: false,
+  STALE_ROW: false,
+  REVISION_CONFLICT: false,
+  SUMMARY_HASH_CHANGED: false,
+  LOCK_TIMEOUT: true,
+  ATOMIC_REQUEST_TOO_LARGE: false,
+  UNRESOLVED_CONFLICT: false,
+  DUPLICATE_APPLY: false,
+  BATCH_ALREADY_ACTIVE: false,
+  BATCH_STATE_CONFLICT: false,
+  BATCH_NOT_FOUND: false,
+  CLUSTER_NOT_FOUND: false,
+  MISSING_REVIEWER_IDENTITY: false,
+  NOT_CONFIRMED: false,
+  SCHEMA_CHANGED: false,
+  INTERNAL: true,
+};
+
+export function isRetryable(code: DedupErrorCode): boolean {
+  return RETRYABLE[code];
+}
+
+export function safeMessageFor(code: DedupErrorCode): string {
+  return SAFE_MESSAGES[code];
+}
+
 export class DedupError extends Error {
   readonly code: DedupErrorCode;
 

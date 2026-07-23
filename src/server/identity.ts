@@ -23,17 +23,30 @@ function sanitizeName(raw: string): string {
 }
 
 /**
- * Resolve the acting reviewer (§21.3). Prefer the account email; otherwise fall
- * back to a sanitized client-supplied name, or fail closed.
+ * §21.3 The acting reviewer, or null when nothing identifies them. Bootstrap
+ * uses this: an anonymous caller is a view to render, not a failure to report.
  */
-export function resolveReviewer(gateway: SheetsGateway, fallbackName?: string): Reviewer {
+export function tryResolveReviewer(
+  gateway: SheetsGateway,
+  fallbackName?: string,
+): Reviewer | null {
   const email = gateway.getActiveUserEmail();
   if (email && email.trim() !== "") {
     return { email, display: email };
   }
   const fallback = fallbackName ? sanitizeName(fallbackName) : "";
-  if (fallback === "") throw new DedupError("MISSING_REVIEWER_IDENTITY");
+  if (fallback === "") return null;
   return { email: null, display: fallback };
+}
+
+/**
+ * Resolve the acting reviewer (§21.3). Prefer the account email; otherwise fall
+ * back to a sanitized client-supplied name, or fail closed.
+ */
+export function resolveReviewer(gateway: SheetsGateway, fallbackName?: string): Reviewer {
+  const reviewer = tryResolveReviewer(gateway, fallbackName);
+  if (!reviewer) throw new DedupError("MISSING_REVIEWER_IDENTITY");
+  return reviewer;
 }
 
 /** §8.7 The audit columns naming whoever performed a mutation. */
