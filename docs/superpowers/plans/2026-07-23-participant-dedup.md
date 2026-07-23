@@ -405,11 +405,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `interface SheetsGateway` with only the operations the app needs: `getSpreadsheetId()`, `getTimeZone()`, `listSheets()`, `readRange(sheetName,a1)`, `readDisplayRange(...)`, `batchGet(ranges)`, `batchUpdate(request)`, `getDocumentLock()`, `getActiveUserEmail()`, `insertSheet`/`hideSheet`, etc. `FakeSheetsGateway` implements an in-memory grid + records the last `batchUpdate` request for assertions.
 - **This is the only module that will later gain an Apps Script implementation.** The fake carries all logic tests.
 
-- [ ] **Step 1: Write failing test:** fake gateway round-trips a range write/read; `batchUpdate` stores the request object; `getDocumentLock()` returns a lock whose double-acquire throws `LOCK_TIMEOUT`.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** interface + fake.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: SheetsGateway interface + in-memory fake"`
+- [x] **Step 1: Write failing test:** fake gateway round-trips a range write/read; `batchUpdate` stores the request object; `getDocumentLock()` returns a lock whose double-acquire throws `LOCK_TIMEOUT`.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** interface + fake.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: SheetsGateway interface + in-memory fake"`
 
 ---
 
