@@ -1,0 +1,24 @@
+{
+  "name": "participant-dedup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Container-bound Google Apps Script for fuzzy participant deduplication",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "node build/esbuild.mjs",
+    "fixture": "tsx tools/generateFixture.ts",
+    "dogfood": "tsx tools/dogfoodReport.ts"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83",
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
