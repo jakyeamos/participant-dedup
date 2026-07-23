@@ -8,6 +8,8 @@
  * seed. Run as a script (`pnpm fixture`) to emit a CSV.
  */
 
+import { jaroWinkler } from "@/server/match/jaroWinkler";
+
 export interface GroundTruthGroup {
   ids: string[];
   kind: string;
@@ -44,10 +46,12 @@ export const POSITIVE_KINDS = new Set([
 export const NEGATIVE_KINDS = new Set(["HOUSEHOLD", "COMMON_SURNAME"]);
 
 // Invented syllable pools — chosen so no combination spells a common real name.
-const FIRST_A = ["Zan", "Vex", "Quor", "Bri", "Lume", "Tavi", "Ryn", "Osk", "Pell", "Wyn", "Kesh", "Faro", "Nyl", "Dro"];
-const FIRST_B = ["ael", "ova", "iri", "usk", "ent", "yra", "ola", "ix", "arn", "eth", "ulo", "yss"];
-const LAST_A = ["Bram", "Corv", "Dulm", "Esta", "Farr", "Glen", "Hald", "Ilm", "Jorv", "Kess", "Lomr", "Mert", "Ostr", "Pral"];
-const LAST_B = ["ock", "ane", "ar", "eby", "oweth", "var", "ren", "ore", "ath", "win", "ick", "and", "ell", "oon"];
+// Distinct syllables — chosen so no combination spells a real name and no two
+// suffixes are within one edit of each other (avoids artificial name-twins).
+const FIRST_A = ["Zan", "Vex", "Quor", "Bri", "Lume", "Tavi", "Ryn", "Osk", "Pell", "Wyn", "Kesh", "Faro", "Nyl", "Dro", "Sael", "Pryn", "Vorn", "Kade", "Yorl", "Emric", "Thal", "Solm"];
+const FIRST_B = ["ael", "ova", "iri", "usk", "ent", "yra", "ola", "ix", "eth", "ulo", "yss", "andor", "iquo", "emar", "oyd", "unys"];
+const LAST_A = ["Bram", "Corv", "Dulm", "Esta", "Farr", "Glen", "Hald", "Ilm", "Jorv", "Kess", "Lomr", "Mert", "Ostr", "Pral", "Quen", "Ryec", "Sorn", "Thul", "Vask", "Wend"];
+const LAST_B = ["ock", "eby", "oweth", "ren", "ore", "ath", "win", "ick", "ell", "oon", "aster", "iddle", "umber", "yland"];
 const STREETS = ["Aldercroft", "Brindlewood", "Cindervale", "Duskmere", "Everwynd", "Fallowgate", "Grimsby Reach", "Hollowmoor", "Ironvale", "Juniper Hollow"];
 const STREET_TYPES = ["St", "Ave", "Rd", "Ln", "Way"];
 const CITIES = ["Wexbury", "Karnhollow", "Orindale", "Pelmoor", "Tavenport", "Yssmarch"];
@@ -188,12 +192,21 @@ class Builder {
 
   addHousehold(): void {
     const shared = this.basePerson();
-    const address = shared["Address"]!;
-    const zip = shared["ZIP"]!;
-    const surname = shared["Last Name"]!;
-    const ids: string[] = [this.emit(shared)];
-    const other = this.basePerson(surname);
-    ids.push(this.emit({ ...other, Address: address, ZIP: zip }));
+    const other = this.basePerson(shared["Last Name"]!);
+    // Real housemates share a surname and address but have clearly distinct
+    // first names — draw until the first names are dissimilar so this stays a
+    // true negative control rather than a plausible duplicate.
+    let guard = 0;
+    while (
+      guard < 50 &&
+      jaroWinkler(other["First Name"]!.toLowerCase(), shared["First Name"]!.toLowerCase()) >= 0.5
+    ) {
+      other["First Name"] = this.cap(this.pick(FIRST_A).toLowerCase() + this.pick(FIRST_B));
+      guard++;
+    }
+    other["Address"] = shared["Address"]!;
+    other["ZIP"] = shared["ZIP"]!;
+    const ids: string[] = [this.emit(shared), this.emit(other)];
     this.groundTruth.push({ ids, kind: "HOUSEHOLD" });
   }
 
