@@ -53,11 +53,11 @@ export interface Harness {
   bobClusterId: string;
 }
 
-export function runToEnd(g: FakeSheetsGateway, cfg: DedupConfig): void {
-  let state = advanceScan(g, cfg);
+export function runToEnd(g: FakeSheetsGateway, cfg: DedupConfig, fallbackName?: string): void {
+  let state = advanceScan(g, cfg, fallbackName);
   let guard = 0;
   while (state.status !== "READY" && state.status !== "FAILED" && guard++ < 10_000) {
-    state = advanceScan(g, cfg);
+    state = advanceScan(g, cfg, fallbackName);
   }
   if (state.status !== "READY") throw new Error(`scan ended ${state.status}`);
 }
@@ -69,8 +69,11 @@ export function harness(email: string | null = "r@x.com"): Harness {
   ensureSystemSheets(g, cfg);
   g.loadSheet(PEOPLE, { values: [HEADER, ...ROWS.map((r) => [...r])] });
 
-  const start = startScan(g, PEOPLE, cfg);
-  runToEnd(g, cfg);
+  // A scan writes, so it needs an identity too (§21.3). The fixture supplies a
+  // name so an anonymous harness can still scan; the save path is left without
+  // one, which is what the identity tests exercise.
+  const start = startScan(g, PEOPLE, cfg, "Fixture");
+  runToEnd(g, cfg, "Fixture");
 
   const batch = batchesRepository(g).get(start.batchId)!;
   const schema = batch.schema as unknown as SourceSchema;

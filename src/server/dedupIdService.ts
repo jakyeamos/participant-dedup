@@ -4,6 +4,7 @@ import type { DedupConfig } from "@/shared/config";
 import { DEDUP_ID_HEADER } from "@/shared/constants";
 import { colLetters } from "@/server/systemSheets";
 import { auditRepository } from "@/server/auditRepository";
+import type { AuditActor } from "@/server/identity";
 import { batchesRepository } from "@/server/batchesRepository";
 import { stateRepository } from "@/server/stateRepository";
 
@@ -29,6 +30,7 @@ export function ensureDedupIds(
   gateway: SheetsGateway,
   schema: SourceSchema,
   _cfg: DedupConfig,
+  actor: AuditActor,
 ): { assigned: number } {
   const sheetName = schema.sheetName;
   const { rowCount } = gateway.getGridSize(sheetName);
@@ -71,6 +73,7 @@ export function ensureDedupIds(
   const audit = auditRepository(gateway);
   for (const id of assignedIds) {
     audit.append({
+      ...actor,
       eventType: "ID_ASSIGNED",
       sourceSheetId: schema.sheetId,
       sourceSheetName: sheetName,
@@ -101,6 +104,7 @@ export function detectDuplicateIds(records: ReadonlyArray<{ dedupId: string }>):
 export function repairDuplicateIds(
   gateway: SheetsGateway,
   schema: SourceSchema,
+  actor: AuditActor,
 ): { repaired: number } {
   const idCol = schema.dedupIdColumnIndex;
   if (idCol < 0) return { repaired: 0 };
@@ -165,6 +169,7 @@ export function repairDuplicateIds(
     const audit = auditRepository(gateway);
     for (const r of reassigned) {
       audit.append({
+        ...actor,
         eventType: "ID_REPAIRED",
         sourceSheetId: schema.sheetId,
         sourceSheetName: sheetName,

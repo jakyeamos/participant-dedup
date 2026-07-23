@@ -4,7 +4,7 @@ import type { DedupConfig } from "@/shared/config";
 import type { MergePlan } from "@/server/review/mergePlan";
 import { DedupError } from "@/server/errors";
 import { canonicalJson, decisionHash, sha256Hex } from "@/server/hashing";
-import { resolveReviewer } from "@/server/identity";
+import { auditActor, type AuditActor } from "@/server/identity";
 import { batchesRepository } from "@/server/batchesRepository";
 import { clustersRepository } from "@/server/clustersRepository";
 import { recordsRepository } from "@/server/recordsRepository";
@@ -75,9 +75,8 @@ interface ResolvedDecision {
   applied: boolean;
 }
 
-function reviewerKeyOf(gateway: SheetsGateway, decisions: ClusterDecision[]): string {
-  const reviewer = resolveReviewer(gateway, decisions[0]?.fallbackReviewerName);
-  return reviewer.email ?? reviewer.display;
+function actorOf(gateway: SheetsGateway, decisions: ClusterDecision[]): AuditActor {
+  return auditActor(gateway, decisions[0]?.fallbackReviewerName);
 }
 
 function schemaOf(batch: Record<string, unknown>): SourceSchema {
@@ -165,7 +164,7 @@ export function createApplyChallenge(
   decisions: ClusterDecision[],
   cfg: DedupConfig,
 ): CreatedChallenge {
-  const reviewerKey = reviewerKeyOf(gateway, decisions);
+  const reviewerKey = actorOf(gateway, decisions).actorId;
 
   const batch = batchesRepository(gateway).get(batchId);
   if (!batch) throw new DedupError("BATCH_NOT_FOUND");
@@ -313,14 +312,14 @@ export function preflight(
   challenge: ApplyChallenge,
   cfg: DedupConfig,
 ): PreflightResult {
-  const reviewerKey = reviewerKeyOf(gateway, decisions);
+  const actor = actorOf(gateway, decisions);
 
   const batch = batchesRepository(gateway).get(batchId);
   if (!batch) throw new DedupError("BATCH_NOT_FOUND");
   // §26.3 the batch as a whole is applied exactly once.
   if (String(batch.status) === "APPLIED") throw new DedupError("DUPLICATE_APPLY");
 
-  const stored = requireChallenge(gateway, batchId, challenge, reviewerKey);
+  const stored = requireChallenge(gateway, batchId, challenge, actor.actorId);
 
   const schema = schemaOf(batch);
   const resolved = resolveDecisions(gateway, batchId, decisions);
@@ -352,6 +351,7 @@ export function preflight(
   verifyNoCrossClusterOverlap(plans);
 
   auditRepository(gateway).append({
+    ...actor,
     eventType: "APPLY_ATTEMPTED",
     batchId,
     details: `clusters=${plans.length} summaryHash=${summaryHash}`,

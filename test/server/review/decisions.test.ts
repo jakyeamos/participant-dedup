@@ -71,7 +71,7 @@ function auditTypes(h: Harness): string[] {
     .map((r) => String(r.eventType));
 }
 
-/** Actor types of the review events only — the scan's own events have no reviewer. */
+/** Actor types of the review events only; the fixture's scan runs under its own name. */
 function reviewActorTypes(h: Harness): string[] {
   return auditRepository(h.g)
     .readAll()

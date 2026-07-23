@@ -10,7 +10,7 @@ import {
   ensureDedupIds,
   repairDuplicateIds,
 } from "@/server/dedupIdService";
-import { resolveReviewer } from "@/server/identity";
+import { auditActor, resolveReviewer } from "@/server/identity";
 import { cloneDefaultConfig } from "@/shared/config";
 import { isDedupError } from "@/server/errors";
 
@@ -29,7 +29,7 @@ describe("ensureDedupIds", () => {
       ],
     });
     const schema = resolveSchema(g, "P", cfg);
-    const res = ensureDedupIds(g, schema, cfg);
+    const res = ensureDedupIds(g, schema, cfg, auditActor(g));
 
     expect(res.assigned).toBe(2);
     expect(g.readRange("P", "E1:E1")[0]![0]).toBe("_Dedup_ID");
@@ -58,7 +58,7 @@ describe("ensureDedupIds", () => {
       ],
     });
     const schema = resolveSchema(g, "P", cfg);
-    const res = ensureDedupIds(g, schema, cfg);
+    const res = ensureDedupIds(g, schema, cfg, auditActor(g));
 
     expect(res.assigned).toBe(1);
     const ids = g.readRange("P", "A2:A3").map((r) => r[0]);
@@ -104,7 +104,7 @@ describe("repairDuplicateIds", () => {
     });
     stateRepository(g).put("SUPPRESSION", "s1", { memberIds: ["dup", "keep"] });
 
-    const res = repairDuplicateIds(g, schema);
+    const res = repairDuplicateIds(g, schema, auditActor(g));
 
     expect(res.repaired).toBe(1);
     const ids = g.readRange("P", "A2:A4").map((r) => r[0]);

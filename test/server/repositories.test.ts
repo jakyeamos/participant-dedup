@@ -8,6 +8,7 @@ import { pairsRepository } from "@/server/pairsRepository";
 import { clustersRepository } from "@/server/clustersRepository";
 import { stateRepository } from "@/server/stateRepository";
 import { auditRepository } from "@/server/auditRepository";
+import { auditActor } from "@/server/identity";
 import { cloneDefaultConfig } from "@/shared/config";
 import { SYSTEM_SHEETS } from "@/shared/constants";
 import type { RecordSnapshot } from "@/server/types";
@@ -227,7 +228,8 @@ describe("auditRepository", () => {
     const g = freshGateway();
     ensureSystemSheets(g, cfg);
     auditRepository(g).append({
-      eventType: "ID_ASSIGNED",
+      ...auditActor(g),
+      eventType:"ID_ASSIGNED",
       batchId: "B1",
       targetDedupId: "id-1",
       beforeValue: "should-not-persist",
@@ -246,7 +248,8 @@ describe("auditRepository", () => {
     const g = freshGateway();
     ensureSystemSheets(g, cfg);
     auditRepository(g).append({
-      eventType: "FIELD_FILLED",
+      ...auditActor(g),
+      eventType:"FIELD_FILLED",
       batchId: "B1",
       targetDedupId: "id-1",
       fieldName: "City",

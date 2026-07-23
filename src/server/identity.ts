@@ -35,3 +35,21 @@ export function resolveReviewer(gateway: SheetsGateway, fallbackName?: string): 
   if (fallback === "") throw new DedupError("MISSING_REVIEWER_IDENTITY");
   return { email: null, display: fallback };
 }
+
+/** §8.7 The audit columns naming whoever performed a mutation. */
+export interface AuditActor {
+  actorId: string;
+  actorType: ActorType;
+  reviewerId: string;
+}
+
+/**
+ * §21.3 Every write is attributed: the account email when there is one, otherwise
+ * the name the client supplied. Resolve this before taking a lock so an anonymous
+ * caller fails before anything reaches the sheet.
+ */
+export function auditActor(gateway: SheetsGateway, fallbackName?: string): AuditActor {
+  const reviewer = resolveReviewer(gateway, fallbackName);
+  const id = reviewer.email ?? reviewer.display;
+  return { actorId: id, actorType: actorTypeOf(reviewer), reviewerId: id };
+}

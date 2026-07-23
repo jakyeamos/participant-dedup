@@ -50,10 +50,10 @@ interface Harness {
 }
 
 function runToEnd(g: FakeSheetsGateway, cfg: DedupConfig): void {
-  let state = advanceScan(g, cfg);
+  let state = advanceScan(g, cfg, "Fixture");
   let guard = 0;
   while (state.status !== "READY" && state.status !== "FAILED" && guard++ < 10_000) {
-    state = advanceScan(g, cfg);
+    state = advanceScan(g, cfg, "Fixture");
   }
   if (state.status !== "READY") throw new Error(`scan ended ${state.status}`);
 }
@@ -64,7 +64,7 @@ function harness(email: string | null = "r@x.com"): Harness {
   ensureSystemSheets(g, cfg);
   g.loadSheet(PEOPLE, { values: [HEADER, ...ROWS.map((r) => [...r])] });
 
-  const start = startScan(g, PEOPLE, cfg);
+  const start = startScan(g, PEOPLE, cfg, "Fixture");
   runToEnd(g, cfg);
 
   const batch = batchesRepository(g).get(start.batchId)!;

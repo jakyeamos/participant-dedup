@@ -198,6 +198,49 @@ describe("scan state machine", () => {
     expect(ids.every((v) => typeof v === "string" && v !== "")).toBe(true);
   });
 
+  it("attributes its audit events to the acting identity (§8.7, §21.3)", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+
+    // Every row a scan files, id assignments included — not just the SCAN_* ones.
+    const events = auditRepository(g).readAll();
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      expect(String(event.actorId)).toBe("r@x.com");
+      expect(String(event.actorType)).toBe("EMAIL");
+      expect(String(event.sourceSheetName)).toBe(PEOPLE);
+    }
+  });
+
+  it("refuses to scan for a caller it cannot name", () => {
+    const cfg = cloneDefaultConfig();
+    const g = new FakeSheetsGateway({ spreadsheetId: "SS1", activeUserEmail: null });
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    let thrown: unknown;
+    try {
+      startScan(g, PEOPLE, cfg);
+    } catch (e) {
+      thrown = e;
+    }
+    expect((thrown as { code: string }).code).toBe("MISSING_REVIEWER_IDENTITY");
+    // The refusal came before the lock, so nothing was written.
+    expect(auditRepository(g).readAll()).toHaveLength(0);
+    expect(g.readRange(PEOPLE, "A1:G1")[0]).toEqual(HEADER);
+
+    const named = startScan(g, PEOPLE, cfg, "Dana");
+    expect(named.batchId).not.toBe("");
+    const started = auditRepository(g).readAll()[0]!;
+    expect(String(started.actorId)).toBe("Dana");
+    expect(String(started.actorType)).toBe("FALLBACK_NAME");
+  });
+
   it("throws BATCH_STATE_CONFLICT when advancing with no active batch", () => {
     const cfg = cloneDefaultConfig();
     const g = newGateway();

@@ -6,6 +6,7 @@ import type { BatchStatus } from "@/shared/constants";
 import type { PairRecord } from "@/server/pairsRepository";
 import { DedupError, type DedupErrorCode } from "@/server/errors";
 import { configHash, makeClusterId, makePairKey } from "@/server/hashing";
+import { auditActor, type AuditActor } from "@/server/identity";
 import { ensureSystemSheets } from "@/server/systemSheets";
 import { batchesRepository } from "@/server/batchesRepository";
 import { recordsRepository } from "@/server/recordsRepository";
@@ -75,7 +76,10 @@ export function startScan(
   gateway: SheetsGateway,
   sheetName: string,
   cfg: DedupConfig,
+  fallbackName?: string,
 ): ScanState {
+  const actor = auditActor(gateway, fallbackName);
+
   const lock = gateway.getDocumentLock();
   lock.acquire(SCAN_LOCK_TIMEOUT_MS);
   try {
@@ -87,7 +91,7 @@ export function startScan(
 
     // ensureDedupIds may create the id column, so the schema is resolved twice:
     // the second pass is what carries a populated dedupIdColumnIndex.
-    ensureDedupIds(gateway, resolveSchema(gateway, sheetName, cfg), cfg);
+    ensureDedupIds(gateway, resolveSchema(gateway, sheetName, cfg), cfg, actor);
     const schema = resolveSchema(gateway, sheetName, cfg);
     const grid = gateway.getGridSize(sheetName);
 
@@ -110,11 +114,15 @@ export function startScan(
       qualifiedEdgeCount: 0,
       clusterCount: 0,
       candidateTruncationCount: 0,
+      createdBy: actor.actorId,
       revision: 1,
     });
     auditRepository(gateway).append({
+      ...actor,
       eventType: "SCAN_STARTED",
       batchId,
+      sourceSheetId: schema.sheetId,
+      sourceSheetName: schema.sheetName,
       details: schema.sheetName,
     });
 
@@ -132,7 +140,13 @@ export function startScan(
  * resumes from the sheets alone — pending pairs are the durable scoring cursor.
  * Calling this on a `READY` batch is a no-op.
  */
-export function advanceScan(gateway: SheetsGateway, cfg: DedupConfig): ScanState {
+export function advanceScan(
+  gateway: SheetsGateway,
+  cfg: DedupConfig,
+  fallbackName?: string,
+): ScanState {
+  const actor = auditActor(gateway, fallbackName);
+
   const lock = gateway.getDocumentLock();
   lock.acquire(SCAN_LOCK_TIMEOUT_MS);
   try {
@@ -142,13 +156,13 @@ export function advanceScan(gateway: SheetsGateway, cfg: DedupConfig): ScanState
 
     switch (String(active.status)) {
       case "SNAPSHOTTING":
-        return snapshotPhase(gateway, cfg, active);
+        return snapshotPhase(gateway, cfg, active, actor);
       case "GENERATING_CANDIDATES":
         return candidatePhase(gateway, cfg, active);
       case "SCORING":
         return scoringPhase(gateway, cfg, active);
       case "CLUSTERING":
-        return clusteringPhase(gateway, cfg, active);
+        return clusteringPhase(gateway, cfg, active, actor);
       default:
         return stateFromBatch(active);
     }
@@ -167,6 +181,7 @@ function snapshotPhase(
   gateway: SheetsGateway,
   cfg: DedupConfig,
   batch: BatchRecord,
+  actor: AuditActor,
 ): ScanState {
   const batches = batchesRepository(gateway);
   const batchId = String(batch.batchId);
@@ -186,8 +201,14 @@ function snapshotPhase(
       revision: revision + 1,
     });
     auditRepository(gateway).append({
+      ...actor,
       eventType: "SCAN_FAILED",
       batchId,
+      sourceSheetId: schema.sheetId,
+      sourceSheetName: schema.sheetName,
+      result: "FAILED",
+      errorCode: error.code,
+      errorMessage: error.safeMessage,
       details: `duplicate _Dedup_ID count=${duplicates.length}`,
     });
     return reread(gateway, batchId);
@@ -302,6 +323,7 @@ function clusteringPhase(
   gateway: SheetsGateway,
   cfg: DedupConfig,
   batch: BatchRecord,
+  actor: AuditActor,
 ): ScanState {
   const batches = batchesRepository(gateway);
   const pairs = pairsRepository(gateway);
@@ -360,8 +382,11 @@ function clusteringPhase(
     revision: revision + 1,
   });
   auditRepository(gateway).append({
+    ...actor,
     eventType: "SCAN_COMPLETED",
     batchId,
+    sourceSheetId: schema.sheetId,
+    sourceSheetName: schema.sheetName,
     details: `clusters=${clusters.length}`,
   });
   return reread(gateway, batchId);

@@ -2,8 +2,13 @@ import type { SheetsGateway } from "@/server/sheets/SheetsGateway";
 import type { CellValue } from "@/server/types";
 import { SYSTEM_SHEETS } from "@/shared/constants";
 import { nowIso, tableFor } from "@/server/systemSheets";
+import type { AuditActor } from "@/server/identity";
 
-export type AuditEvent = Record<string, unknown> & { eventType: string };
+/**
+ * §8.7 Every audit row names its actor. Requiring it here rather than defaulting
+ * it means a new writer cannot quietly file an unattributed event.
+ */
+export type AuditEvent = Record<string, unknown> & AuditActor & { eventType: string };
 export type AuditRecord = Record<string, CellValue>;
 
 /** Event types whose before/after value columns carry meaningful data. */
@@ -30,7 +35,6 @@ export function auditRepository(gateway: SheetsGateway): AuditRepository {
       table.append({
         eventId: newEventId(),
         eventAt: nowIso(gateway),
-        actorId: gateway.getActiveUserEmail() ?? "unknown",
         ...event,
         beforeValue: carriesValues ? event.beforeValue ?? null : null,
         afterValue: carriesValues ? event.afterValue ?? null : null,
