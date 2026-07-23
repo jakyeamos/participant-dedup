@@ -153,9 +153,17 @@ function encodeField(kind: FieldKind, value: unknown): CellValue {
   return String(value);
 }
 
-/** Encode a record into on-sheet column order. Used by direct batchUpdate writers. */
-export function encodeRow(fields: FieldSpec[], rec: Record<string, unknown>): CellValue[] {
-  return fields.map((f) => encodeField(f.kind, rec[f.key]));
+/**
+ * Encode a record into on-sheet column order. Used by direct batchUpdate writers.
+ *
+ * Generic over the record so callers can pass a declared row type — an interface
+ * is not assignable to `Record<string, unknown>` — and keep the compile-time
+ * check that their keys are real columns. Columns the record does not mention
+ * come out blank.
+ */
+export function encodeRow<T extends object>(fields: FieldSpec[], rec: T): CellValue[] {
+  const byKey = rec as Record<string, unknown>;
+  return fields.map((f) => encodeField(f.kind, byKey[f.key]));
 }
 
 function decodeField(kind: FieldKind, raw: CellValue): unknown {

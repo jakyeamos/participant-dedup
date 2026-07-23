@@ -1,9 +1,9 @@
-import { newEventId } from "@/server/auditRepository";
+import { newEventId, type AuditRowFields, type DeletedRowSnapshot } from "@/server/auditRepository";
 import type { ActorType } from "@/server/identity";
 import type { MergePlan } from "@/server/review/mergePlan";
 import type { RecordSnapshot } from "@/server/types";
 
-export type AuditRow = Record<string, unknown>;
+export type AuditRow = AuditRowFields;
 
 export interface AuditContext {
   batchId: string;
@@ -18,13 +18,6 @@ export interface AuditContext {
   eventAt: string;
 }
 
-/** The recovery record for a deleted participant row (§25.4). */
-export interface DeletedRowSnapshot {
-  dedupId: string;
-  row: number;
-  values: string[];
-}
-
 function base(ctx: AuditContext, eventType: string): AuditRow {
   return {
     eventId: newEventId(),
@@ -37,7 +30,9 @@ function base(ctx: AuditContext, eventType: string): AuditRow {
     applyBatchId: ctx.applyBatchId,
     sourceSheetId: ctx.sourceSheetId,
     sourceSheetName: ctx.sourceSheetName,
-    result: "OK",
+    // §8.7 spells the result vocabulary SUCCESS | SKIPPED | FAILED. Composing a
+    // row means it is about to be written; a failure throws before it is.
+    result: "SUCCESS",
   };
 }
 

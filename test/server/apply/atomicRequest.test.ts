@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAtomicRequest, type AtomicRequestInput } from "@/server/apply/atomicRequest";
-import { composeAuditRows, type AuditContext } from "@/server/apply/audit";
+import { composeAuditRows, type AuditContext, type AuditRow } from "@/server/apply/audit";
 import { DedupError } from "@/server/errors";
 import type { MergePlan } from "@/server/review/mergePlan";
 import type { RecordSnapshot } from "@/server/types";
@@ -90,6 +90,19 @@ const ctx: AuditContext = {
   sourceSheetName: "Participants",
   eventAt: "2026-07-23T00:00:00.000Z",
 };
+
+/** An audit row with the attribution every real one carries (§8.7). */
+function auditRow(patch: Partial<AuditRow> & { eventType: string }): AuditRow {
+  return {
+    eventId: "evt_test",
+    eventAt: ctx.eventAt,
+    actorId: ctx.actorId,
+    actorType: ctx.actorType,
+    reviewerId: ctx.reviewerId,
+    batchId: ctx.batchId,
+    ...patch,
+  };
+}
 
 function input(patch: Partial<AtomicRequestInput> = {}): AtomicRequestInput {
   return {
@@ -296,7 +309,7 @@ describe("buildAtomicRequest (§25)", () => {
             deletions: [{ deletedId: "gone", retainedId: "keep" }],
           }),
         ],
-        auditRows: [{ eventType: "APPLY_COMPLETED", batchId: "b1" }],
+        auditRows: [auditRow({ eventType: "APPLY_COMPLETED" })],
         statusUpdates: [{ sheetId: CLUSTER_SHEET_ID, rowIndex: 4, cells: ["b1", "C1"] }],
       }),
       cfg,
@@ -322,12 +335,10 @@ describe("buildAtomicRequest (§25)", () => {
           }),
         ],
         auditRows: [
-          {
+          auditRow({
             eventType: "ROW_DELETED",
-            batchId: "b1",
-            reviewerId: "r@x.com",
             rowSnapshot: { dedupId: "gone", row: 6, values: ["gone"] },
-          },
+          }),
         ],
       }),
       cfg,

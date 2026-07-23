@@ -4,6 +4,13 @@ import { SYSTEM_SHEETS } from "@/shared/constants";
 import { nowIso, tableFor } from "@/server/systemSheets";
 import type { AuditActor } from "@/server/identity";
 
+/** The recovery record for a deleted participant row (§25.4). */
+export interface DeletedRowSnapshot {
+  dedupId: string;
+  row: number;
+  values: string[];
+}
+
 /**
  * §8.7 Every audit row names its actor. Requiring it here rather than defaulting
  * it means a new writer cannot quietly file an unattributed event.
@@ -11,7 +18,8 @@ import type { AuditActor } from "@/server/identity";
  * The optional keys are exactly the §8.7 columns. encodeRow writes by column, so
  * anything else a caller passes is silently discarded — spelling the shape out
  * turns that into a compile error instead. `eventId` and `eventAt` are omitted
- * because append() stamps them.
+ * because append() stamps them; the apply path stamps its own and uses
+ * `AuditRowFields`.
  */
 export interface AuditEvent extends AuditActor {
   eventType: string;
@@ -25,7 +33,7 @@ export interface AuditEvent extends AuditActor {
   fieldName?: string;
   beforeValue?: CellValue;
   afterValue?: CellValue;
-  rowSnapshot?: CellValue[];
+  rowSnapshot?: DeletedRowSnapshot;
   confidence?: string;
   score?: number;
   reasons?: unknown[];
@@ -34,6 +42,16 @@ export interface AuditEvent extends AuditActor {
   errorCode?: string;
   errorMessage?: string;
 }
+/**
+ * An audit row written straight through `batchUpdate` rather than by append():
+ * the apply composes its rows up front so the whole change reaches the sheet in
+ * one request, which means it stamps its own identifiers.
+ */
+export interface AuditRowFields extends AuditEvent {
+  eventId: string;
+  eventAt: string;
+}
+
 export type AuditRecord = Record<string, CellValue>;
 
 /** Event types whose before/after value columns carry meaningful data. */
