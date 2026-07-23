@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "testCommand": "pnpm test",
+  "coveragePaths": [
+    "coverage/lcov.info",
+    "coverage/coverage-final.json"
+  ],
+  "coverageFormat": "auto",
+  "threshold": 80,
+  "checks": {
+    "coverage": false,
+    "security": true,
+    "checklist": true
+  }
+}
