@@ -423,11 +423,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `resolveSchema(gateway: SheetsGateway, sheetName: string, cfg: DedupConfig): SourceSchema` (§10). Throws `DedupError` with `HEADER_AMBIGUOUS` / `MISSING_REQUIRED_HEADERS` / `DUPLICATE_HEADERS`.
 - Consumes: `HEADER_ALIASES`, `SheetsGateway.readDisplayRange`, `schemaHash`.
 
-- [ ] **Step 1: Write failing tests:** a sheet whose row 3 has First/Last/DOB/ZIP headers resolves with `headerRow===3` and correct `columnByCanonicalField`; missing Last → `MISSING_REQUIRED_HEADERS`; two tied header rows → `HEADER_AMBIGUOUS`; duplicate `First` columns → `DUPLICATE_HEADERS`; unmatched nonblank headers become `extraColumns`; `_Dedup_ID` excluded from extras.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §10.2 algorithm.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: header-row schema resolver"`
+- [x] **Step 1: Write failing tests:** a sheet whose row 3 has First/Last/DOB/ZIP headers resolves with `headerRow===3` and correct `columnByCanonicalField`; missing Last → `MISSING_REQUIRED_HEADERS`; two tied header rows → `HEADER_AMBIGUOUS`; duplicate `First` columns → `DUPLICATE_HEADERS`; unmatched nonblank headers become `extraColumns`; `_Dedup_ID` excluded from extras.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §10.2 algorithm.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: header-row schema resolver"`
 
 ---
 
