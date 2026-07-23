@@ -441,11 +441,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `ensureSystemSheets(gateway, cfg)` (§8 init/hide/migrate + schema-version header); each repository exposes typed CRUD scoped to its sheet (columns per §8.1–8.7). `configRepository.load(): DedupConfig` merges `_Dedup_Config` over `DEFAULT_CONFIG`.
 - Consumes: `SheetsGateway`, `types`.
 
-- [ ] **Step 1: Write failing tests** (fake gateway): `ensureSystemSheets` creates all seven `_Dedup_*` sheets with header rows, hidden; re-running is idempotent (no duplicate sheets, migrates schema_version); records repo writes+reads a `RecordSnapshot` row; audit repo append never stores participant values in disallowed columns.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** systemSheets + repositories per §8.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: hidden system sheets + repositories"`
+- [x] **Step 1: Write failing tests** (fake gateway): `ensureSystemSheets` creates all seven `_Dedup_*` sheets with header rows, hidden; re-running is idempotent (no duplicate sheets, migrates schema_version); records repo writes+reads a `RecordSnapshot` row; audit repo append never stores participant values in disallowed columns.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** systemSheets + repositories per §8.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: hidden system sheets + repositories"`
 
 ---
 
