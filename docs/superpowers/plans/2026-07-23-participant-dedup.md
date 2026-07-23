@@ -538,11 +538,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `preflight(gateway, batchId, decisions: ClusterDecision[], challenge: {token:string; summaryHash:string; confirmed:boolean}, cfg): { plan: MergePlan[]; deletionRowCount: number; summaryHash: string }` (§24). Fails closed on: stale row fingerprint (AT-22), duplicate `_Dedup_ID`, unresolved conflict, revision mismatch (§27.2), changed `summaryHash` (AT-18/challenge), unconfirmed checkbox (AT-18), already-applied decision (AT-26 idempotency, §26.3).
 - Consumes: `buildMergePlan`, repositories, `rowFingerprint`, `decisionHash`.
 
-- [ ] **Step 1: Write failing tests:** AT-18 apply without `confirmed` → rejected; AT-22 row edited after review (fingerprint changed) → `STALE_ROW`, no plan; changed summaryHash → `SUMMARY_HASH_CHANGED`; AT-26 re-preflight of an already-applied decision → no-op (no duplicate fills/deletions); revision conflict → `REVISION_CONFLICT`.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** the 17-step §24 sequence.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: apply preflight with fail-closed validation"`
+- [x] **Step 1: Write failing tests:** AT-18 apply without `confirmed` → rejected; AT-22 row edited after review (fingerprint changed) → `STALE_ROW`, no plan; changed summaryHash → `SUMMARY_HASH_CHANGED`; AT-26 re-preflight of an already-applied decision → no-op (no duplicate fills/deletions); revision conflict → `REVISION_CONFLICT`.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** the 17-step §24 sequence.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: apply preflight with fail-closed validation"`
 
 ---
 

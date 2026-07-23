@@ -3,7 +3,7 @@ import type { ClusterType } from "@/shared/constants";
 import type { Cluster, PairScore } from "@/server/types";
 
 /** §18.3 displayed-member ceiling. */
-const MAX_CLUSTER_MEMBERS = 50;
+export const MAX_CLUSTER_MEMBERS = 50;
 
 const CONFIDENCE_RANK: Record<"HIGH" | "MEDIUM" | "LOW", number> = {
   HIGH: 0,
