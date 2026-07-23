@@ -5,7 +5,7 @@ import type { ClusterStatus } from "@/shared/constants";
 import type { MergePlan } from "@/server/review/mergePlan";
 import { DedupError, type DedupErrorCode } from "@/server/errors";
 import { decisionHash } from "@/server/hashing";
-import { resolveReviewer } from "@/server/identity";
+import { actorTypeOf, resolveReviewer } from "@/server/identity";
 import { auditRepository } from "@/server/auditRepository";
 import { batchesRepository } from "@/server/batchesRepository";
 import { clustersRepository } from "@/server/clustersRepository";
@@ -215,7 +215,7 @@ export function saveClusterDecision(
       clusterId: cluster.clusterId,
       reviewerId,
       actorId: reviewerId,
-      actorType: "USER",
+      actorType: actorTypeOf(reviewer),
       sourceSheetId: schema.sheetId,
       sourceSheetName: schema.sheetName,
       relatedIds: cluster.memberIds,

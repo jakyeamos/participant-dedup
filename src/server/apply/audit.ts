@@ -1,4 +1,5 @@
 import { newEventId } from "@/server/auditRepository";
+import type { ActorType } from "@/server/identity";
 import type { MergePlan } from "@/server/review/mergePlan";
 import type { RecordSnapshot } from "@/server/types";
 
@@ -9,6 +10,8 @@ export interface AuditContext {
   applyBatchId: string;
   /** Acting account, normally the reviewer's email. */
   actorId: string;
+  /** §8.7 Whether `actorId` is a verified account or a typed-in name. */
+  actorType: ActorType;
   reviewerId: string;
   sourceSheetId: number;
   sourceSheetName: string;
@@ -28,7 +31,7 @@ function base(ctx: AuditContext, eventType: string): AuditRow {
     eventType,
     eventAt: ctx.eventAt,
     actorId: ctx.actorId,
-    actorType: "USER",
+    actorType: ctx.actorType,
     reviewerId: ctx.reviewerId,
     batchId: ctx.batchId,
     applyBatchId: ctx.applyBatchId,

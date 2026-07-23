@@ -6,6 +6,13 @@ export interface Reviewer {
   display: string;
 }
 
+/** §8.7 Whether the audit's actor was a verified account or a typed-in name. */
+export type ActorType = "EMAIL" | "FALLBACK_NAME";
+
+export function actorTypeOf(reviewer: Reviewer): ActorType {
+  return reviewer.email === null ? "FALLBACK_NAME" : "EMAIL";
+}
+
 /** Strip angle brackets and control chars, collapse whitespace, cap length. */
 function sanitizeName(raw: string): string {
   return raw

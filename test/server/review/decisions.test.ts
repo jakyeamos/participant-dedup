@@ -71,6 +71,14 @@ function auditTypes(h: Harness): string[] {
     .map((r) => String(r.eventType));
 }
 
+/** Actor types of the review events only — the scan's own events have no reviewer. */
+function reviewActorTypes(h: Harness): string[] {
+  return auditRepository(h.g)
+    .readAll()
+    .filter((r) => String(r.clusterId) !== "")
+    .map((r) => String(r.actorType));
+}
+
 describe("saveClusterDecision", () => {
   it("marks a complete merge ready to apply and returns its plan", () => {
     const h = harness();
@@ -196,6 +204,20 @@ describe("saveClusterDecision", () => {
       h.cfg,
     );
     expect(named.reviewerId).toBe("Dana script");
+  });
+
+  it("records whether the actor was verified or self-declared (§8.7)", () => {
+    const signedIn = harness();
+    saveClusterDecision(signedIn.g, bobDecision(signedIn), signedIn.cfg);
+    expect(reviewActorTypes(signedIn)).toEqual(["EMAIL"]);
+
+    const anonymous = harness(null);
+    saveClusterDecision(
+      anonymous.g,
+      bobDecision(anonymous, { fallbackReviewerName: "Dana" }),
+      anonymous.cfg,
+    );
+    expect(reviewActorTypes(anonymous)).toEqual(["FALLBACK_NAME"]);
   });
 
   it("records the first review and later edits as different events", () => {

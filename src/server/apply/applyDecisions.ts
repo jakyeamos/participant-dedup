@@ -2,7 +2,7 @@ import type { SheetsGateway } from "@/server/sheets/SheetsGateway";
 import type { ClusterDecision, RecordSnapshot } from "@/server/types";
 import type { DedupConfig } from "@/shared/config";
 import { DedupError } from "@/server/errors";
-import { resolveReviewer } from "@/server/identity";
+import { actorTypeOf, resolveReviewer } from "@/server/identity";
 import { SYSTEM_SHEETS } from "@/shared/constants";
 import { CLUSTER_FIELDS, encodeRow, nowIso, tableFor } from "@/server/systemSheets";
 import { composeAuditRows } from "@/server/apply/audit";
@@ -105,6 +105,7 @@ export function applyDecisions(
         batchId,
         applyBatchId,
         actorId: reviewer.email ?? reviewer.display,
+        actorType: actorTypeOf(reviewer),
         reviewerId: reviewer.email ?? reviewer.display,
         sourceSheetId: result.schema.sheetId,
         sourceSheetName: result.schema.sheetName,

@@ -85,6 +85,7 @@ const ctx: AuditContext = {
   applyBatchId: "ab1",
   reviewerId: "r@x.com",
   actorId: "r@x.com",
+  actorType: "EMAIL",
   sourceSheetId: SOURCE_SHEET_ID,
   sourceSheetName: "Participants",
   eventAt: "2026-07-23T00:00:00.000Z",
@@ -183,7 +184,7 @@ describe("composeAuditRows (§25.4)", () => {
     for (const row of composeAuditRows(ctx, plans, records, rows)) {
       expect(row.actorId).toBe("r@x.com");
       expect(row.reviewerId).toBe("r@x.com");
-      expect(row.actorType).toBe("USER");
+      expect(row.actorType).toBe("EMAIL");
       expect(row.batchId).toBe("b1");
       expect(row.applyBatchId).toBe("ab1");
       expect(row.eventAt).toBe("2026-07-23T00:00:00.000Z");
