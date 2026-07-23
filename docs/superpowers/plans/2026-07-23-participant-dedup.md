@@ -350,11 +350,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `formCluster(scores: PairScore[], cfg: DedupConfig): Cluster[]` where `Cluster = { clusterId: string; memberIds: string[]; edges: PairScore[]; topConfidence: 'HIGH'|'MEDIUM'|'LOW'; hasLowOnlyEdges: boolean; chainWarning: boolean }` (§18). Core clusters from HIGH/MEDIUM edges via union-find; LOW edges attach as suggestions only (§18.2); cluster size limit (§18.3); ordering (§18.4).
 - Consumes: `PairScore`.
 
-- [ ] **Step 1: Write failing tests:** AT-12 three transitively related records (A~B, B~C HIGH) → one cluster of 3; LOW-only edge does not merge two otherwise-separate HIGH clusters (stays a suggestion); oversized cluster flags `POSSIBLE_CHAIN_CLUSTER`; deterministic `clusterId` + ordering.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** union-find over qualifying edges per §18.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: union-find cluster formation"`
+- [x] **Step 1: Write failing tests:** AT-12 three transitively related records (A~B, B~C HIGH) → one cluster of 3; LOW-only edge does not merge two otherwise-separate HIGH clusters (stays a suggestion); oversized cluster flags `POSSIBLE_CHAIN_CLUSTER`; deterministic `clusterId` + ordering.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** union-find over qualifying edges per §18.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: union-find cluster formation"` — done `5c641be`. `Cluster` extended beyond the plan's minimal shape to carry `clusterType`, `suggestedMemberIds`, `topScore`, and `oversized` so §18.2 rule 2 (suggested members) and §18.3 (deletion block) are representable downstream.
 
 ---
 
