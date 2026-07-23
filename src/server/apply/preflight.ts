@@ -1,8 +1,6 @@
 import type { SheetsGateway } from "@/server/sheets/SheetsGateway";
-import type { ClusterRecord } from "@/server/clustersRepository";
 import type { Cluster, ClusterDecision, RecordSnapshot, SourceSchema } from "@/server/types";
 import type { DedupConfig } from "@/shared/config";
-import type { ClusterType, Warning } from "@/shared/constants";
 import type { MergePlan } from "@/server/review/mergePlan";
 import { DedupError } from "@/server/errors";
 import { canonicalJson, decisionHash, sha256Hex } from "@/server/hashing";
@@ -15,7 +13,7 @@ import { stateRepository } from "@/server/stateRepository";
 import { resolveSchema } from "@/server/schemaResolver";
 import { buildSnapshots } from "@/server/scan/snapshot";
 import { buildMergePlan } from "@/server/review/mergePlan";
-import { MAX_CLUSTER_MEMBERS } from "@/server/match/cluster";
+import { clusterFromRow } from "@/server/review/clusterRow";
 
 /** §23.2 The confirmation challenge outlives the execution that created it. */
 export const APPLY_CHALLENGE_STATE_TYPE = "APPLY_CHALLENGE";
@@ -77,32 +75,6 @@ interface ResolvedDecision {
   applied: boolean;
 }
 
-function asStrings(value: unknown): string[] {
-  return Array.isArray(value) ? value.map((v) => String(v)) : [];
-}
-
-/**
- * Rebuilds the in-memory cluster from its stored row. `oversized` is recomputed
- * rather than stored: it is a function of the member counts on the row.
- */
-function toCluster(row: ClusterRecord): Cluster {
-  const memberIds = asStrings(row.memberIds);
-  const suggestedMemberIds = asStrings(row.suggestedMemberIds);
-  const clusterType = String(row.clusterType) as ClusterType;
-  return {
-    clusterId: String(row.clusterId),
-    clusterType,
-    memberIds,
-    suggestedMemberIds,
-    edges: [],
-    topConfidence: String(row.highestConfidence ?? "LOW") as Cluster["topConfidence"],
-    topScore: Number(row.maxScore ?? 0),
-    hasLowOnlyEdges: clusterType === "LOW_PAIR",
-    chainWarning: (asStrings(row.warnings) as Warning[]).includes("POSSIBLE_CHAIN_CLUSTER"),
-    oversized: memberIds.length + suggestedMemberIds.length > MAX_CLUSTER_MEMBERS,
-  };
-}
-
 function reviewerKeyOf(gateway: SheetsGateway, decisions: ClusterDecision[]): string {
   const reviewer = resolveReviewer(gateway, decisions[0]?.fallbackReviewerName);
   return reviewer.email ?? reviewer.display;
@@ -139,7 +111,7 @@ function resolveDecisions(
       throw new DedupError("REVISION_CONFLICT");
     }
 
-    return { decision, cluster: toCluster(row), applied: String(row.status) === "APPLIED" };
+    return { decision, cluster: clusterFromRow(row), applied: String(row.status) === "APPLIED" };
   });
 }
 
