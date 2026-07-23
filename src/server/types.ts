@@ -1,5 +1,6 @@
 import type {
   CanonicalField,
+  ClusterType,
   Confidence,
   NameMatchMethod,
 } from "@/shared/constants";
@@ -110,6 +111,23 @@ export type FieldChoice =
   | { mode: "AUTO"; sourceId: string }
   | { mode: "SOURCE"; sourceId: string }
   | { mode: "LEAVE_BLANK" };
+
+export interface Cluster {
+  clusterId: string;
+  clusterType: ClusterType;
+  /** Core members (§18.1), ordered deterministically by dedup id. */
+  memberIds: string[];
+  /** §18.2 rule 2: outside records attached only as suggestions. */
+  suggestedMemberIds: string[];
+  /** Every retained edge (core + explanatory Low), for reason display. */
+  edges: PairScore[];
+  topConfidence: "HIGH" | "MEDIUM" | "LOW";
+  topScore: number;
+  hasLowOnlyEdges: boolean;
+  chainWarning: boolean;
+  /** §18.3: exceeds the displayed-member ceiling; deletion is blocked. */
+  oversized: boolean;
+}
 
 export interface ClusterDecision {
   batchId: string;
