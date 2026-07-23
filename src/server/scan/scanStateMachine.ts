@@ -18,6 +18,7 @@ import { buildSnapshots } from "@/server/scan/snapshot";
 import { generateCandidates } from "@/server/match/candidateGenerator";
 import { scorePair } from "@/server/match/scorePair";
 import { formCluster } from "@/server/match/cluster";
+import { filterSuppressed } from "@/server/review/suppression";
 
 const SCAN_LOCK_TIMEOUT_MS = 30_000;
 
@@ -305,6 +306,7 @@ function clusteringPhase(
   const batches = batchesRepository(gateway);
   const pairs = pairsRepository(gateway);
   const batchId = String(batch.batchId);
+  const schema = schemaOf(batch);
   const revision = num(batch.revision);
 
   const scores = pairs
@@ -313,7 +315,19 @@ function clusteringPhase(
     .map((p) => p.score)
     .filter((s): s is PairScore => s !== null);
 
-  const clusters = formCluster(scores, cfg);
+  const relevantHashes = new Map<string, string>();
+  for (const rec of recordsRepository(gateway).readByBatch(batchId, schema.headers)) {
+    relevantHashes.set(rec.dedupId, rec.relevantHash);
+  }
+
+  // §19.3 Clusters the reviewer already kept stay out of the queue until one of
+  // their members' relevant fields — or the config — changes.
+  const clusters = filterSuppressed(
+    gateway,
+    formCluster(scores, cfg),
+    (id) => relevantHashes.get(id) ?? "",
+    String(batch.configHash),
+  );
   clustersRepository(gateway).append(
     clusters.map((c) => ({
       batchId,

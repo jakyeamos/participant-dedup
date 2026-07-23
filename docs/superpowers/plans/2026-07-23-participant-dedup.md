@@ -500,11 +500,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `suppressionKey(clusterMemberRelevantHashes: string[], configHash: string): string` (§19.1); `isSuppressed(key, store): boolean`; `recordKeepAll(key, store)`; scan filters clusters whose key is suppressed AND whose members’ relevant hashes are unchanged (§19.3).
 - Consumes: `relevantHash`, `configHash`.
 
-- [ ] **Step 1: Write failing tests:** AT-23 Keep All unchanged → suppressed next scan; AT-24 a member row changed (relevant hash differs) → reappears; config change (configHash differs) → suppression ineligible.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §19.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: keep-all suppression"`
+- [x] **Step 1: Write failing tests:** AT-23 Keep All unchanged → suppressed next scan; AT-24 a member row changed (relevant hash differs) → reappears; config change (configHash differs) → suppression ineligible.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §19.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: keep-all suppression"`
 
 ---
 
