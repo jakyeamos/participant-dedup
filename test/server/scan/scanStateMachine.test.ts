@@ -5,7 +5,8 @@ import { clustersRepository } from "@/server/clustersRepository";
 import { pairsRepository } from "@/server/pairsRepository";
 import { recordsRepository } from "@/server/recordsRepository";
 import { auditRepository } from "@/server/auditRepository";
-import { advanceScan, startScan } from "@/server/scan/scanStateMachine";
+import { advanceScan, cancelScan, startScan } from "@/server/scan/scanStateMachine";
+import { batchesRepository } from "@/server/batchesRepository";
 import { cloneDefaultConfig, type DedupConfig } from "@/shared/config";
 import { isDedupError } from "@/server/errors";
 import { HEADERS, generateFixture } from "../../../tools/generateFixture";
@@ -59,6 +60,15 @@ function runToEnd(g: FakeSheetsGateway, cfg: DedupConfig): ReturnType<typeof adv
     state = advanceScan(g, cfg);
   }
   return state;
+}
+
+function codeOf(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (err) {
+    return isDedupError(err) ? err.code : `unexpected: ${String(err)}`;
+  }
+  return "no-throw";
 }
 
 function pendingCount(g: FakeSheetsGateway, batchId: string): number {
@@ -239,6 +249,94 @@ describe("scan state machine", () => {
     const started = auditRepository(g).readAll()[0]!;
     expect(String(started.actorId)).toBe("Dana");
     expect(String(started.actorType)).toBe("FALLBACK_NAME");
+  });
+
+  it("cancels a finished scan, discarding working rows but keeping the audit (§20.6)", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    const rows = twentyRows();
+    loadGrid(g, PEOPLE, HEADER, rows);
+
+    const start = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    const auditBefore = auditRepository(g).readAll().length;
+
+    const cancelled = cancelScan(g, cfg);
+    expect(cancelled.status).toBe("CANCELLED");
+    expect(cancelled.metrics.clusters).toBe(0);
+
+    // Working state is gone; the batch row itself survives as the record of it.
+    expect(recordsRepository(g).readByBatch(start.batchId, HEADER)).toHaveLength(0);
+    expect(pairsRepository(g).readByBatch(start.batchId)).toHaveLength(0);
+    expect(clustersRepository(g).listByBatch(start.batchId)).toHaveLength(0);
+    expect(batchesRepository(g).get(start.batchId)?.status).toBe("CANCELLED");
+
+    // Audit is retained and gains one attributed cancel event.
+    const events = auditRepository(g).readAll();
+    expect(events).toHaveLength(auditBefore + 1);
+    const cancelEvent = events[events.length - 1]!;
+    expect(String(cancelEvent.eventType)).toBe("SCAN_CANCELLED");
+    expect(String(cancelEvent.actorId)).toBe("r@x.com");
+    expect(String(cancelEvent.batchId)).toBe(start.batchId);
+
+    // Participant values and their assigned ids are untouched by a cancel.
+    const after = g.readRange(PEOPLE, `A1:G${rows.length + 1}`);
+    expect(after[0]).toEqual(HEADER);
+    for (let i = 0; i < rows.length; i++) expect(after[i + 1]).toEqual(rows[i]);
+    const ids = g.readRange(PEOPLE, `H2:H${rows.length + 1}`).map((r) => r[0]);
+    expect(ids.every((v) => typeof v === "string" && v !== "")).toBe(true);
+  });
+
+  it("releases the workbook so a fresh scan can start after a cancel", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    advanceScan(g, cfg); // leave it mid-scan, not at READY
+    cancelScan(g, cfg);
+
+    const second = startScan(g, PEOPLE, cfg);
+    expect(second.batchId).not.toBe(first.batchId);
+    expect(runToEnd(g, cfg).status).toBe("READY");
+    // The cancelled batch's rows did not leak into the new one.
+    expect(clustersRepository(g).listByBatch(first.batchId)).toHaveLength(0);
+    expect(clustersRepository(g).listByBatch(second.batchId)).toHaveLength(2);
+  });
+
+  it("refuses to cancel with no active batch, or once an apply is under way", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    expect(codeOf(() => cancelScan(g, cfg))).toBe("BATCH_STATE_CONFLICT");
+
+    const start = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    batchesRepository(g).update(start.batchId, { status: "APPLYING" });
+
+    expect(codeOf(() => cancelScan(g, cfg))).toBe("BATCH_STATE_CONFLICT");
+    // The refusal came before any deletion: the apply still has its snapshots.
+    expect(recordsRepository(g).readByBatch(start.batchId, HEADER)).toHaveLength(20);
+    expect(clustersRepository(g).listByBatch(start.batchId)).toHaveLength(2);
+  });
+
+  it("requires an identity before it will cancel", () => {
+    const cfg = cloneDefaultConfig();
+    const g = new FakeSheetsGateway({ spreadsheetId: "SS1", activeUserEmail: null });
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+    const start = startScan(g, PEOPLE, cfg, "Dana");
+
+    expect(codeOf(() => cancelScan(g, cfg))).toBe("MISSING_REVIEWER_IDENTITY");
+    expect(batchesRepository(g).get(start.batchId)?.status).not.toBe("CANCELLED");
+
+    expect(cancelScan(g, cfg, "Dana").status).toBe("CANCELLED");
+    const events = auditRepository(g).readAll();
+    expect(String(events[events.length - 1]!.actorType)).toBe("FALLBACK_NAME");
   });
 
   it("throws BATCH_STATE_CONFLICT when advancing with no active batch", () => {

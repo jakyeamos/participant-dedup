@@ -6,6 +6,8 @@ import { tableFor } from "@/server/systemSheets";
 export interface RecordsRepository {
   append(records: RecordSnapshot[]): void;
   readByBatch(batchId: string, headers: string[]): RecordSnapshot[];
+  /** Blank every snapshot row for a batch (§20.6 cancel discards working state). */
+  deleteByBatch(batchId: string): void;
 }
 
 function byHeader(headers: string[], values: readonly CellValue[]): Record<string, CellValue> {
@@ -45,6 +47,12 @@ export function recordsRepository(gateway: SheetsGateway): RecordsRepository {
             normalized: r.normalized as unknown as RecordSnapshot["normalized"],
           };
         });
+    },
+
+    deleteByBatch(batchId: string): void {
+      for (const { index, rec } of table.rowsWithIndex()) {
+        if (rec.batchId === batchId) table.writeAt(index, {});
+      }
     },
   };
 }

@@ -171,6 +171,60 @@ export function advanceScan(
   }
 }
 
+/**
+ * §20.6 Cancels the active batch. The working rows — records, pairs, clusters —
+ * are discarded; the audit trail is not, so a cancelled scan still says who ran
+ * it and who ended it. Refuses to cancel mid-apply: the apply pipeline owns the
+ * batch until it finishes or fails, and pulling its snapshots out from under it
+ * would leave the source sheet half-changed with nothing to reconcile against.
+ */
+export function cancelScan(
+  gateway: SheetsGateway,
+  cfg: DedupConfig,
+  fallbackName?: string,
+): ScanState {
+  const actor = auditActor(gateway, fallbackName);
+
+  const lock = gateway.getDocumentLock();
+  lock.acquire(SCAN_LOCK_TIMEOUT_MS);
+  try {
+    ensureSystemSheets(gateway, cfg);
+    const batches = batchesRepository(gateway);
+    const active = batches.getActive();
+    if (!active) throw new DedupError("BATCH_STATE_CONFLICT");
+    if (String(active.status) === "APPLYING") throw new DedupError("BATCH_STATE_CONFLICT");
+
+    const batchId = String(active.batchId);
+    const schema = schemaOf(active);
+    const cancelledFrom = String(active.status);
+
+    recordsRepository(gateway).deleteByBatch(batchId);
+    pairsRepository(gateway).deleteByBatch(batchId);
+    clustersRepository(gateway).deleteByBatch(batchId);
+
+    batches.update(batchId, {
+      status: "CANCELLED",
+      phase: "CANCELLED",
+      recordCount: 0,
+      candidateCount: 0,
+      qualifiedEdgeCount: 0,
+      clusterCount: 0,
+      revision: num(active.revision) + 1,
+    });
+    auditRepository(gateway).append({
+      ...actor,
+      eventType: "SCAN_CANCELLED",
+      batchId,
+      sourceSheetId: schema.sheetId,
+      sourceSheetName: schema.sheetName,
+      details: `cancelled from ${cancelledFrom}`,
+    });
+    return reread(gateway, batchId);
+  } finally {
+    lock.release();
+  }
+}
+
 function reread(gateway: SheetsGateway, batchId: string): ScanState {
   const batch = batchesRepository(gateway).get(batchId);
   if (!batch) throw new DedupError("INTERNAL");

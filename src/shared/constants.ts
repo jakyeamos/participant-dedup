@@ -111,6 +111,8 @@ export const AUDIT_EVENT_TYPES = [
   "SCAN_STARTED",
   "SCAN_COMPLETED",
   "SCAN_FAILED",
+  // §20.6 A cancel is not a failure: the batch ends by request, not by error.
+  "SCAN_CANCELLED",
   "ID_ASSIGNED",
   "ID_REPAIRED",
   "CLUSTER_REVIEWED",

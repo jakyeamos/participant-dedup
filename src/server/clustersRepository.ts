@@ -10,6 +10,8 @@ export interface ClustersRepository {
   get(clusterId: string): ClusterRecord | null;
   update(clusterId: string, patch: Record<string, unknown>): void;
   listByBatch(batchId: string): ClusterRecord[];
+  /** Blank every cluster row for a batch (§20.6 cancel discards working state). */
+  deleteByBatch(batchId: string): void;
 }
 
 export function clustersRepository(gateway: SheetsGateway): ClustersRepository {
@@ -35,6 +37,12 @@ export function clustersRepository(gateway: SheetsGateway): ClustersRepository {
 
     listByBatch(batchId: string): ClusterRecord[] {
       return table.rows().filter((r) => r.batchId === batchId);
+    },
+
+    deleteByBatch(batchId: string): void {
+      for (const { index, rec } of table.rowsWithIndex()) {
+        if (rec.batchId === batchId) table.writeAt(index, {});
+      }
     },
   };
 }
