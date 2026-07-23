@@ -153,6 +153,11 @@ function encodeField(kind: FieldKind, value: unknown): CellValue {
   return String(value);
 }
 
+/** Encode a record into on-sheet column order. Used by direct batchUpdate writers. */
+export function encodeRow(fields: FieldSpec[], rec: Record<string, unknown>): CellValue[] {
+  return fields.map((f) => encodeField(f.kind, rec[f.key]));
+}
+
 function decodeField(kind: FieldKind, raw: CellValue): unknown {
   if (kind === "json") {
     return typeof raw === "string" && raw !== "" ? JSON.parse(raw) : null;
@@ -210,7 +215,7 @@ export class SheetTable {
   }
 
   private cellsFor(rec: Record<string, unknown>): CellValue[] {
-    return this.fields.map((f) => encodeField(f.kind, rec[f.key]));
+    return encodeRow(this.fields, rec);
   }
 
   private recFor(cells: CellValue[]): TableRow {

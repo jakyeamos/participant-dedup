@@ -11,7 +11,7 @@ const VALUE_BEARING_EVENTS = new Set<string>(["FIELD_FILLED"]);
 
 let auditSeq = 0;
 
-function newEventId(): string {
+export function newEventId(): string {
   auditSeq += 1;
   return `evt_${Date.now().toString(36)}_${auditSeq}_${Math.random().toString(36).slice(2, 8)}`;
 }

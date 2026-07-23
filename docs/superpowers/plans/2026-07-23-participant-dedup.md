@@ -556,11 +556,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `buildAtomicRequest(plan: MergePlan[], deletions, auditRows, statusUpdates, cfg): SheetsBatchUpdateRequest` (§25) — order: blank-field fills → descending row deletions → audit append → queue/batch status (§25.1); row deletions computed as descending non-overlapping intervals (§25.3); request-size guard throws `ATOMIC_REQUEST_TOO_LARGE` above `maxAtomicApplyRequests` (§25.6). `composeAuditRows(...)` includes deleted-row snapshots (§25.4), user-attributed.
 - Consumes: `MergePlan`, `DedupConfig.execution.maxAtomicApplyRequests`.
 
-- [ ] **Step 1: Write failing tests:** deletions for rows [5,3,8] emit descending intervals [8,5,3]; request array ordering matches §25.1; exceeding request cap → `ATOMIC_REQUEST_TOO_LARGE`; audit rows contain deleted snapshot + reviewer, and are part of the SAME request object (atomicity); AT-29 an invalid sub-request means the whole request is one unit (builder produces a single batchUpdate, not multiple).
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §25.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: atomic batchUpdate builder + audit composition"`
+- [x] **Step 1: Write failing tests:** deletions for rows [5,3,8] emit descending intervals [8,5,3]; request array ordering matches §25.1; exceeding request cap → `ATOMIC_REQUEST_TOO_LARGE`; audit rows contain deleted snapshot + reviewer, and are part of the SAME request object (atomicity); AT-29 an invalid sub-request means the whole request is one unit (builder produces a single batchUpdate, not multiple).
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §25.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: atomic batchUpdate builder + audit composition"`
 
 ---
 
