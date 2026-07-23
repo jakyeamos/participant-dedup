@@ -119,8 +119,10 @@ export class FakeSheetsGateway implements SheetsGateway {
   private readonly activeUserEmail: string | null;
   private readonly sheets = new Map<string, FakeSheet>();
   private nextSheetId = 1;
+  private uuidSeq = 0;
   private lastBatchUpdate: SheetsBatchUpdateRequest | null = null;
   private readonly lockState: { holder: FakeDocumentLock | null } = { holder: null };
+  private readonly hiddenColumns = new Set<string>();
 
   constructor(options: FakeGatewayOptions) {
     this.spreadsheetId = options.spreadsheetId;
@@ -312,5 +314,26 @@ export class FakeSheetsGateway implements SheetsGateway {
 
   getDocumentLock(): DocumentLock {
     return new FakeDocumentLock(this.lockState);
+  }
+
+  newUuid(): string {
+    this.uuidSeq += 1;
+    const h = this.uuidSeq.toString(16).padStart(12, "0");
+    return `00000000-0000-4000-8000-${h}`;
+  }
+
+  getGridSize(sheetName: string): { rowCount: number; columnCount: number } {
+    const sheet = this.require(sheetName);
+    const columnCount = sheet.grid.reduce((m, row) => Math.max(m, row.length), 0);
+    return { rowCount: sheet.grid.length, columnCount };
+  }
+
+  hideColumn(sheetName: string, columnIndex: number): void {
+    this.require(sheetName);
+    this.hiddenColumns.add(`${sheetName}:${columnIndex}`);
+  }
+
+  isColumnHidden(sheetName: string, columnIndex: number): boolean {
+    return this.hiddenColumns.has(`${sheetName}:${columnIndex}`);
   }
 }

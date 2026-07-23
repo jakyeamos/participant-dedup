@@ -131,4 +131,11 @@ export interface SheetsGateway {
   batchUpdate(request: SheetsBatchUpdateRequest): SheetsBatchUpdateResult;
 
   getDocumentLock(): DocumentLock;
+
+  /** A fresh UUID (maps to `Utilities.getUuid()`). */
+  newUuid(): string;
+  /** Data extent of a sheet (maps to `getLastRow()`/`getLastColumn()`). */
+  getGridSize(sheetName: string): { rowCount: number; columnCount: number };
+  /** Hide a single zero-based column in a sheet (maps to `hideColumns`). */
+  hideColumn(sheetName: string, columnIndex: number): void;
 }

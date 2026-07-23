@@ -145,7 +145,7 @@ participant-dedup/
 - [ ] **Step 1: Write failing test:** `new DedupError('STALE_ROW','x').code === 'STALE_ROW'`; `isDedupError(new Error()) === false`; `safeMessage` never contains passed PII arg (constructor takes only code + a static safe message).
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement** `errors.ts` with the code union (§29) and a `SAFE_MESSAGES` map so `safeMessage` derives from code, not from interpolated data.
-- [ ] **Step 4: Run** → PASS.
+- [x] **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit.** `git commit -m "feat: DedupError taxonomy with PII-safe messages"`
 
 ---
@@ -459,11 +459,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `resolveReviewer(gateway, fallbackName?): { email: string|null; display: string }` (§21.3 fallback); `ensureDedupIds(gateway, schema, cfg): { assigned: number }` (§11.1/11.2); `detectDuplicateIds(records): string[]` and `repairDuplicateIds(gateway, schema)` (§11.3) — repair keeps first occurrence, reassigns later ones, under document lock.
 - Consumes: `SheetsGateway`, `schema`.
 
-- [ ] **Step 1: Write failing tests:** blank ID column → UUID assigned to every participant row, column hidden, `ID_ASSIGNED` audit appended without values; duplicate IDs detected → `detectDuplicateIds` returns them; `repairDuplicateIds` keeps first, reassigns rest; email unavailable → reviewer requires fallback name (AT-21).
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §11 + §21.3.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: dedup-id assignment/repair + reviewer identity"`
+- [x] **Step 1: Write failing tests:** blank ID column → UUID assigned to every participant row, column hidden, `ID_ASSIGNED` audit appended without values; duplicate IDs detected → `detectDuplicateIds` returns them; `repairDuplicateIds` keeps first, reassigns rest; email unavailable → reviewer requires fallback name (AT-21).
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §11 + §21.3.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: dedup-id assignment/repair + reviewer identity"`
 
 ---
 
