@@ -369,13 +369,12 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 **Interfaces:**
 - Produces: `generateFixture(seed: number, rows?: number): { rows: Array<Record<string,string>>; groundTruth: Array<{ids: string[]; kind: string}> }` — invented names/addresses only; injects §32.4 patterns: exact duplicates, swapped names, common surnames, typos, household members, placeholder DOBs, changed ZIPs. Deterministic by seed. Also writes CSV to `tools/out/fixture.csv` when run as a script.
 
-- [ ] **Step 1: Write failing test:** `generateFixture(1, 200)` returns 200 rows, deterministic across two calls with same seed, groundTruth non-empty, and **no** name collides with a small denylist of real-looking seed names (sanity that data is synthetic).
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** a seeded PRNG + invented token pools; emit ground-truth labels per injected duplicate.
-- [ ] **Step 4: Run** → PASS. Then run `pnpm fixture` to emit `tools/out/fixture.csv` (gitignored).
-- [ ] **Step 5: Commit.** `git commit -m "feat: synthetic 5k fixture generator with ground truth"`
+- [x] **Step 1: Write failing test:** `generateFixture(1, 200)` returns 200 rows, deterministic across two calls with same seed, groundTruth non-empty, and **no** name collides with a small denylist of real-looking seed names (sanity that data is synthetic).
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** a seeded PRNG + invented token pools; emit ground-truth labels per injected duplicate.
+- [x] **Step 4: Run** → PASS. Then run `pnpm fixture` to emit `tools/out/fixture.csv` (gitignored).
+- [x] **Step 5: Commit.** `git commit -m "feat: synthetic 5k fixture generator with ground truth"`
 
----
 
 ### Task C2: Dogfood precision/recall report
 
@@ -387,13 +386,12 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Consumes: `generateFixture`, `normalizeParticipant`, `generateCandidates`, `scorePair`, `formCluster`.
 - Produces: `runDogfood(rows, groundTruth, cfg): { candidateCount: number; truncated: boolean; byBand: Record<'HIGH'|'MEDIUM'|'LOW', {precision:number; recall:number; f1:number}>; recallAllSeeded: number; householdFalsePositives: number }`.
 
-- [ ] **Step 1: Write failing test (this is the dogfood gate):** on 5,000 seeded rows — `candidateCount < cfg.blocking.maxTotalCandidates`; `recallAllSeeded === 1` (every seeded duplicate appears as a candidate); `householdFalsePositives === 0` (no household-only pair reaches eligible); HIGH-band precision `>= 0.98`.
-- [ ] **Step 2: Run** `pnpm vitest run test/tools/dogfood.test.ts` → observe actual numbers.
-- [ ] **Step 3: DOGFOOD ITERATION.** If any gate fails, inspect misclassified pairs, tune only `DEFAULT_CONFIG` thresholds/weights (never hardcode), re-run. Repeat until gates pass. Record final numbers in the implementation report.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: dogfood precision/recall harness (engine gate passing)"`
+- [x] **Step 1: Write failing test (this is the dogfood gate):** on 5,000 seeded rows — `candidateCount < cfg.blocking.maxTotalCandidates`; `recallAllSeeded === 1` (every seeded duplicate appears as a candidate); `householdFalsePositives === 0` (no household-only pair reaches eligible); HIGH-band precision `>= 0.98`.
+- [x] **Step 2: Run** `pnpm vitest run test/tools/dogfood.test.ts` → observe actual numbers.
+- [x] **Step 3: DOGFOOD ITERATION.** If any gate fails, inspect misclassified pairs, tune only `DEFAULT_CONFIG` thresholds/weights (never hardcode), re-run. Repeat until gates pass. Record final numbers in the implementation report.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: dogfood precision/recall harness (engine gate passing)"`
 
----
 
 # PHASE D — Repositories + scan state machine
 
