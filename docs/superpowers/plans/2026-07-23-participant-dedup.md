@@ -477,16 +477,16 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `snapshotBatch(gateway, schema, cfg): batchId` (§12.1 bulk reads → `RecordSnapshot[]` with fingerprints); `startScan(gateway, cfg): ScanState`; `advanceScan(gateway, cfg): ScanState` (§20 SNAPSHOTTING→GENERATING_CANDIDATES→SCORING→CLUSTERING→READY with durable cursors); phases call B7/B8/B9 pure functions and persist via repositories.
 - Consumes: repositories, `generateCandidates`, `scorePair`, `formCluster`, `ensureDedupIds`, `detectDuplicateIds`.
 
-- [ ] **Step 1: Write failing integration tests** (fake gateway):
+- [x] **Step 1: Write failing integration tests** (fake gateway):
   - Full scan of a 20-row synthetic batch advances through all phases to `READY` and yields expected clusters.
   - AT-30: duplicate `_Dedup_ID` present → scan stops at `DUPLICATE_DEDUP_ID`, no clusters.
   - Cursor resume: interrupting after SCORING and calling `advanceScan` again resumes without rescoring completed pairs.
   - AT-27 (scaled): 5,000-row fixture completes through repeated `advanceScan` slices; candidate count < cap.
   - Scanning never writes participant values (assert source grid unchanged except `_Dedup_ID`).
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §20 state machine + §12 snapshot.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: resumable scan state machine + snapshot"`
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §20 state machine + §12 snapshot.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: resumable scan state machine + snapshot"`
 
 ---
 

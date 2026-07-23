@@ -11,6 +11,7 @@ export type DedupErrorCode =
   | "UNRESOLVED_CONFLICT"
   | "DUPLICATE_APPLY"
   | "BATCH_ALREADY_ACTIVE"
+  | "BATCH_STATE_CONFLICT"
   | "BATCH_NOT_FOUND"
   | "CLUSTER_NOT_FOUND"
   | "MISSING_REVIEWER_IDENTITY"
@@ -40,6 +41,8 @@ const SAFE_MESSAGES: Record<DedupErrorCode, string> = {
   DUPLICATE_APPLY: "These changes were already applied.",
   BATCH_ALREADY_ACTIVE:
     "Another scan is already active. Resume or cancel it first.",
+  BATCH_STATE_CONFLICT:
+    "The scan is not in a state that allows this step. Refresh and try again.",
   BATCH_NOT_FOUND: "The requested scan batch could not be found.",
   CLUSTER_NOT_FOUND: "The requested cluster could not be found.",
   MISSING_REVIEWER_IDENTITY:
