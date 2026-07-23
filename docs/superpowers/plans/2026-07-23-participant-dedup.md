@@ -520,11 +520,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `buildMergePlan(cluster, decision: ClusterDecision, records: RecordSnapshot[], schema, cfg): MergePlan` where `MergePlan = { fills: Array<{retainedId:string; header:string; value:string; sourceId:string}>; deletions: Array<{deletedId:string; retainedId:string}>; conflicts: Array<{retainedId:string; header:string; options:string[]}>; ok: boolean }` (§22). Protected fields (First/Middle/Last/DOB/`_Dedup_ID`, formulas) never auto-filled (§22.3); only blank, nonconflicting fields auto-fill (§22.5); conflicting proposed values require explicit `SOURCE`/`LEAVE_BLANK` choice or `ok=false` (§22.2).
 - Consumes: `RecordSnapshot`, `ClusterDecision`, `schema`. **Recomputes from snapshots — never trusts browser values.**
 
-- [ ] **Step 1: Write failing tests:** AT-14 one unambiguous blank → auto fill proposed; AT-15 blank First/DOB → never auto-filled (stays protected); AT-16 two conflicting ZIP proposals → `conflicts` entry, `ok=false` until resolved; AT-13 multiple retained → every deleted row assigned to a retained target or `ok=false`; formula field → skipped with `FORMULA_FIELD_SKIPPED`.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** §22.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: server-side merge plan with protected fields + conflicts"`
+- [x] **Step 1: Write failing tests:** AT-14 one unambiguous blank → auto fill proposed; AT-15 blank First/DOB → never auto-filled (stays protected); AT-16 two conflicting ZIP proposals → `conflicts` entry, `ok=false` until resolved; AT-13 multiple retained → every deleted row assigned to a retained target or `ok=false`; formula field → skipped with `FORMULA_FIELD_SKIPPED`.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** §22.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: server-side merge plan with protected fields + conflicts"`
 
 ---
 
