@@ -54,6 +54,12 @@ export interface PreflightResult {
   plans: MergePlan[];
   deletionRowCount: number;
   summaryHash: string;
+  /** The live schema, proven to still hash to the batch's schema. */
+  schema: SourceSchema;
+  /** Scan snapshots, proven to still match the live rows they describe. */
+  records: RecordSnapshot[];
+  /** Where each record sits in the sheet right now, one-based. */
+  rowByDedupId: Record<string, number>;
 }
 
 interface StoredChallenge {
@@ -379,10 +385,18 @@ export function preflight(
     details: `clusters=${plans.length} summaryHash=${summaryHash}`,
   });
 
+  // Live positions, not `sourceRowAtScan`: the fingerprint checks prove content,
+  // not position, so a row that merely moved is still a valid apply target.
+  const rowByDedupId: Record<string, number> = {};
+  for (const rec of current) rowByDedupId[rec.dedupId] = rec.sourceRowAtScan;
+
   return {
     batchId,
     plans,
     deletionRowCount: plans.reduce((n, p) => n + p.deletions.length, 0),
     summaryHash,
+    schema: liveSchema,
+    records: frozen,
+    rowByDedupId,
   };
 }

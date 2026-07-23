@@ -574,10 +574,10 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 - Produces: `applyDecisions(gateway, batchId, decisions, challenge, cfg): { deletedRows: number; filledFields: number; auditWritten: number }` — acquires document lock, runs `preflight`, builds atomic request, calls `gateway.batchUpdate` once, marks decisions applied with `applyBatchId` (§26.2).
 - Consumes: E1–E3 + `SheetsGateway`.
 
-- [ ] **Step 1: Write failing integration tests** (fake gateway): AT-19 confirmed deletion → source row removed in fake grid + audit snapshot present; AT-17 saving a decision (no apply) changes no source values; AT-26 second `applyDecisions` with same decisions → idempotent no-op; lock timeout → fail closed.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement**.
-- [ ] **Step 4: Run** → PASS.
+- [x] **Step 1: Write failing integration tests** (fake gateway): AT-19 confirmed deletion → source row removed in fake grid + audit snapshot present; AT-17 saving a decision (no apply) changes no source values; AT-26 second `applyDecisions` with same decisions → idempotent no-op; lock timeout → fail closed.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement**.
+- [x] **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit.** `git commit -m "feat: atomic apply executor"`
 
 ---
