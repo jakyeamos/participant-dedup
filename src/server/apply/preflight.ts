@@ -354,7 +354,6 @@ export function preflight(
     ...actor,
     eventType: "APPLY_ATTEMPTED",
     batchId,
-    details: `clusters=${plans.length} summaryHash=${summaryHash}`,
   });
 
   // Live positions, not `sourceRowAtScan`: the fingerprint checks prove content,

@@ -7,8 +7,33 @@ import type { AuditActor } from "@/server/identity";
 /**
  * §8.7 Every audit row names its actor. Requiring it here rather than defaulting
  * it means a new writer cannot quietly file an unattributed event.
+ *
+ * The optional keys are exactly the §8.7 columns. encodeRow writes by column, so
+ * anything else a caller passes is silently discarded — spelling the shape out
+ * turns that into a compile error instead. `eventId` and `eventAt` are omitted
+ * because append() stamps them.
  */
-export type AuditEvent = Record<string, unknown> & AuditActor & { eventType: string };
+export interface AuditEvent extends AuditActor {
+  eventType: string;
+  batchId?: string;
+  applyBatchId?: string;
+  clusterId?: string;
+  sourceSheetId?: number;
+  sourceSheetName?: string;
+  targetDedupId?: string;
+  relatedIds?: string[];
+  fieldName?: string;
+  beforeValue?: CellValue;
+  afterValue?: CellValue;
+  rowSnapshot?: CellValue[];
+  confidence?: string;
+  score?: number;
+  reasons?: unknown[];
+  warnings?: string[];
+  result?: "SUCCESS" | "SKIPPED" | "FAILED";
+  errorCode?: string;
+  errorMessage?: string;
+}
 export type AuditRecord = Record<string, CellValue>;
 
 /** Event types whose before/after value columns carry meaningful data. */

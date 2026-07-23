@@ -222,7 +222,9 @@ export function saveClusterDecision(
       confidence: cluster.topConfidence,
       score: cluster.topScore,
       warnings: plan?.issues ?? [],
-      result: status,
+      // The save succeeded; what it decided is the event type's job to say. An
+      // UNRESOLVED decision is still a recorded review, not a failed write.
+      result: "SUCCESS",
     });
 
     return {

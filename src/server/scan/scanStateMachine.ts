@@ -123,7 +123,6 @@ export function startScan(
       batchId,
       sourceSheetId: schema.sheetId,
       sourceSheetName: schema.sheetName,
-      details: schema.sheetName,
     });
 
     const inserted = batches.get(batchId);
@@ -196,7 +195,6 @@ export function cancelScan(
 
     const batchId = String(active.batchId);
     const schema = schemaOf(active);
-    const cancelledFrom = String(active.status);
 
     recordsRepository(gateway).deleteByBatch(batchId);
     pairsRepository(gateway).deleteByBatch(batchId);
@@ -217,7 +215,6 @@ export function cancelScan(
       batchId,
       sourceSheetId: schema.sheetId,
       sourceSheetName: schema.sheetName,
-      details: `cancelled from ${cancelledFrom}`,
     });
     return reread(gateway, batchId);
   } finally {
@@ -263,7 +260,6 @@ function snapshotPhase(
       result: "FAILED",
       errorCode: error.code,
       errorMessage: error.safeMessage,
-      details: `duplicate _Dedup_ID count=${duplicates.length}`,
     });
     return reread(gateway, batchId);
   }
@@ -441,7 +437,6 @@ function clusteringPhase(
     batchId,
     sourceSheetId: schema.sheetId,
     sourceSheetName: schema.sheetName,
-    details: `clusters=${clusters.length}`,
   });
   return reread(gateway, batchId);
 }
