@@ -75,7 +75,26 @@ Do **not** push to the production participant workbook. Always use a copy.
 | `pnpm build` | Emit `dist/` |
 | `pnpm fixture` | Write a synthetic CSV under `tools/out/` |
 | `pnpm dogfood` | Precision/recall gate on 5,000 synthetic rows |
+| `pnpm sheet-dogfood` | End-to-end scan→queue→apply rehearsal on a CSV via FakeSheetsGateway |
 
+## Live Google Sheet dogfood
+
+1. Generate a synthetic workbook CSV (no real participant data):
+   ```bash
+   pnpm exec tsx -e 'import {writeFileSync,mkdirSync} from "fs"; import {generateFixture,HEADERS} from "./tools/generateFixture.ts"; mkdirSync("tools/out",{recursive:true}); const {rows,groundTruth}=generateFixture(42,80); const esc=v=>/[",\n]/.test(v)?`"${v.replace(/"/g,"\"\"")}"`:v; writeFileSync("tools/out/uat-participants-80.csv",[HEADERS.join(","),...rows.map(r=>HEADERS.map(h=>esc(r[h]??"")).join(","))].join("\n")); writeFileSync("tools/out/uat-ground-truth-80.json",JSON.stringify(groundTruth,null,2));'
+   ```
+   Or reuse `tools/out/uat-participants-80.csv` if already generated.
+2. Rehearse locally first:
+   ```bash
+   pnpm sheet-dogfood tools/out/uat-participants-80.csv tools/out/uat-ground-truth-80.json
+   ```
+3. Create a **new** Google Sheet (never the production workbook), import the CSV
+   (File → Import → Upload), rename it something like `participant-dedup UAT`.
+4. Follow the owner hand-off checklist above (`clasp login` → push to a bound
+   copy → Advanced Sheets → authorize → UAT).
+
+Live sheet creation from this agent requires you to be signed into Google in the
+browser session it opens.
 ## Privacy
 
 - No real participant data in `src/`, `test/`, or `tools/`.

@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "build": "node build/esbuild.mjs",
     "fixture": "tsx tools/generateFixture.ts",
-    "dogfood": "tsx tools/dogfoodReport.ts"
+    "dogfood": "tsx tools/dogfoodReport.ts",
+    "sheet-dogfood": "tsx tools/sheetDogfood.ts"
   },
   "devDependencies": {
     "@google/clasp": "^2.4.2",
