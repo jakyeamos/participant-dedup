@@ -92,9 +92,11 @@ describe("acceptance matrix (§33)", () => {
   });
 
   for (const [id, coverage] of Object.entries(MATRIX)) {
-    it(`${id} is mapped to automated coverage (${coverage.via})`, () => {
+    it(`${id} is mapped to automated coverage (${coverage.kind === "automated" ? coverage.via : coverage.reason})`, () => {
       expect(coverage.kind).toBe("automated");
-      expect(coverage.via.length).toBeGreaterThan(0);
+      if (coverage.kind === "automated") {
+        expect(coverage.via.length).toBeGreaterThan(0);
+      }
     });
   }
 
