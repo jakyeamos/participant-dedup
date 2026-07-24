@@ -673,9 +673,9 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 **Files:**
 - Create: `test/acceptance/matrix.test.ts` (aggregates/labels AT-01…AT-30 across existing tests, marks live-only ones as documented-manual)
 
-- [ ] **Step 1: Write** a matrix test file that references each AT-01…AT-30 by id, asserting the automatable ones pass and explicitly `.skip`-documenting the live-only ones (AT-19 real deletion is covered via fake gateway; AT-27 scaled; AT-28 via static scan; the truly-live perf/network items are marked for owner UAT).
-- [ ] **Step 2: Run** → PASS/skip as designed.
-- [ ] **Step 3: Commit.** `git commit -m "test: acceptance matrix coverage map"`
+- [x] **Step 1: Write** a matrix test file that references each AT-01…AT-30 by id, asserting the automatable ones pass and explicitly `.skip`-documenting the live-only ones (AT-19 real deletion is covered via fake gateway; AT-27 scaled; AT-28 via static scan; the truly-live perf/network items are marked for owner UAT).
+- [x] **Step 2: Run** → PASS/skip as designed.
+- [x] **Step 3: Commit.** `git commit -m "test: acceptance matrix coverage map"`
 
 ---
 

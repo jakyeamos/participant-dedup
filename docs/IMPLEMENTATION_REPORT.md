@@ -85,7 +85,7 @@ LOW stays empty on this fixture (by design of the scoring thresholds).
 | --- | --- |
 | Client sources are TypeScript modules (`sidebar.ts`, `views/*`) bundled into `Sidebar.html`, not hand-written `sidebar.js` | Same runtime contract; jsdom-testable pure views; G1 inlines the IIFE. |
 | Template lives at `src/client/Sidebar.template.html` with CSS/JS placeholders | Required so `showSidebar` can inject `<?!= boot ?>` and esbuild can inline assets. |
-| Package manager is `pnpm` (spec §35 cites `npm test`) | Repo / agent invariant; equivalent gates via `pnpm test`. |
+| Package manager is `pnpm` (spec §35 names the npm CLI) | Repo / agent invariant; equivalent gates via `pnpm test`. |
 | Spec file ends mid-§26.1 in the recovered copy | Verbatim recovery from the handoff package; behavior for §27–§30 covered by plan tasks and tests. |
 
 ## Remaining risks
