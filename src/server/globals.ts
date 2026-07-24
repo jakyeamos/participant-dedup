@@ -16,9 +16,11 @@ import { AppsScriptSheetsGateway } from "@/server/sheets/AppsScriptSheetsGateway
 import {
   menuApplyReviewedDecisions,
   menuOpenReviewSidebar,
+  menuQueueFilters,
   menuRefreshCurrentBatch,
   menuScanActiveSheet,
   menuViewChangeHistory,
+  onInstall,
   onOpen,
   reportRepair,
 } from "@/server/menu";
@@ -55,8 +57,10 @@ function handlers(): Handlers {
  */
 export const ENTRY_POINTS: Record<string, EntryPoint> = {
   onOpen,
+  onInstall,
   menuScanActiveSheet,
   menuOpenReviewSidebar,
+  menuQueueFilters,
   menuApplyReviewedDecisions,
   menuViewChangeHistory,
   menuRefreshCurrentBatch,
@@ -89,14 +93,40 @@ export const ENTRY_POINTS: Record<string, EntryPoint> = {
 };
 
 /**
+ * Bag holding the real §6 implementations. The clasp build appends top-level
+ * `function` shims that forward here — Apps Script only discovers simple
+ * triggers / the Run dropdown from source-level declarations, not from an
+ * IIFE that assigns onto `globalThis`.
+ */
+export const ENTRY_POINTS_BAG = "__DEDUP_ENTRY_POINTS__";
+
+export interface InstallEntryPointsOptions {
+  /**
+   * When true (default), also copy each name onto `target` — what unit tests
+   * assert. Production `Code.js` installs the bag only and lets the build's
+   * top-level shims own the global names so they are not overwritten.
+   */
+  installNames?: boolean;
+}
+
+/**
  * Apps Script resolves menu items, simple triggers and `google.script.run`
  * targets by looking the name up on the global object at call time, so the
  * registry is installed at load.
  */
-export function installEntryPoints(target: Record<string, unknown>): void {
-  for (const name of Object.keys(ENTRY_POINTS)) {
-    target[name] = ENTRY_POINTS[name];
+export function installEntryPoints(
+  target: Record<string, unknown>,
+  options: InstallEntryPointsOptions = {},
+): void {
+  const installNames = options.installNames !== false;
+  target[ENTRY_POINTS_BAG] = ENTRY_POINTS;
+  if (installNames) {
+    for (const name of Object.keys(ENTRY_POINTS)) {
+      target[name] = ENTRY_POINTS[name];
+    }
   }
 }
 
-installEntryPoints(globalThis as unknown as Record<string, unknown>);
+installEntryPoints(globalThis as unknown as Record<string, unknown>, {
+  installNames: false,
+});

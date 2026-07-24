@@ -60,6 +60,16 @@ export function runRpc<T>(request: RpcRequest | undefined, fn: () => T): RpcResu
     return { ok: true, requestId, data: fn() };
   } catch (thrown) {
     const code: DedupErrorCode = isDedupError(thrown) ? thrown.code : "INTERNAL";
+    // Server-only breadcrumb for Executions / Cloud logs. Never put the raw
+    // message in the envelope — unexpected Apps Script text can quote sheet
+    // names or cell values (§21.8).
+    if (!isDedupError(thrown) && typeof Logger !== "undefined") {
+      const name = thrown instanceof Error ? thrown.name : "Thrown";
+      const message = thrown instanceof Error ? thrown.message : String(thrown);
+      Logger.log(
+        `[dedup] ${requestId} ${name}: ${message.replace(/[\r\n\t]+/g, " ").slice(0, 240)}`,
+      );
+    }
     return {
       ok: false,
       requestId,

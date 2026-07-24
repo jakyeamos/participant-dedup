@@ -17,6 +17,8 @@ export type DedupErrorCode =
   | "MISSING_REVIEWER_IDENTITY"
   | "NOT_CONFIRMED"
   | "SCHEMA_CHANGED"
+  | "SHEET_TOO_LARGE"
+  | "BACKEND_NOT_CONFIGURED"
   | "INTERNAL";
 
 const SAFE_MESSAGES: Record<DedupErrorCode, string> = {
@@ -47,9 +49,13 @@ const SAFE_MESSAGES: Record<DedupErrorCode, string> = {
   CLUSTER_NOT_FOUND: "The requested cluster could not be found.",
   MISSING_REVIEWER_IDENTITY:
     "A reviewer name is required because your account email is unavailable.",
-  NOT_CONFIRMED: "The confirmation checkbox must be checked before applying.",
+  NOT_CONFIRMED: "Type confirm before applying.",
   SCHEMA_CHANGED:
     "The sheet structure changed since the scan. Re-scan before continuing.",
+  SHEET_TOO_LARGE:
+    "This sheet has too many participant rows for a reliable scan. Split it into sheets of 5,000 rows or fewer.",
+  BACKEND_NOT_CONFIGURED:
+    "The scan backend is not configured. Set DEDUP_API_URL and DEDUP_API_KEY in Script Properties.",
   INTERNAL: "An unexpected error occurred.",
 };
 
@@ -83,6 +89,8 @@ const RETRYABLE: Record<DedupErrorCode, boolean> = {
   MISSING_REVIEWER_IDENTITY: false,
   NOT_CONFIRMED: false,
   SCHEMA_CHANGED: false,
+  SHEET_TOO_LARGE: false,
+  BACKEND_NOT_CONFIGURED: false,
   INTERNAL: true,
 };
 

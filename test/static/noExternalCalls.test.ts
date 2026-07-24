@@ -44,11 +44,22 @@ function sourceFiles(): Array<{ path: string; body: string }> {
 describe("static: no external calls (AT-28)", () => {
   const files = sourceFiles();
 
-  it("never references UrlFetchApp or fetch(", () => {
+  it("never references bare fetch( outside the owned-backend relay", () => {
     const hits: string[] = [];
     for (const file of files) {
-      if (/\bUrlFetchApp\b/.test(file.body)) hits.push(`${file.path}: UrlFetchApp`);
+      // Apps Script uses UrlFetchApp.fetch — allow that only in the relay module.
+      if (file.path.replace(/\\/g, "/") === "src/server/scan/remoteScan.ts") continue;
       if (/\bfetch\s*\(/.test(file.body)) hits.push(`${file.path}: fetch(`);
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("only uses UrlFetchApp in the owned Railway scan relay", () => {
+    const hits: string[] = [];
+    for (const file of files) {
+      if (!/\bUrlFetchApp\b/.test(file.body)) continue;
+      if (file.path.replace(/\\/g, "/") === "src/server/scan/remoteScan.ts") continue;
+      hits.push(`${file.path}: UrlFetchApp`);
     }
     expect(hits).toEqual([]);
   });

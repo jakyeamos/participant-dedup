@@ -21,14 +21,18 @@ describe("dist/ artifact", () => {
     expect(existsSync(MANIFEST), "run `pnpm build` first").toBe(true);
   });
 
-  it("exposes onOpen and keeps the bundle free of module loaders and network APIs", () => {
+  it("exposes install/open triggers and keeps the bundle free of module loaders and network APIs", () => {
     const source = readFileSync(CODE, "utf8");
 
-    expect(source).toMatch(/\bfunction\s+onOpen\b|\bonOpen\s*=/);
+    // Top-level declaration required — IIFE-only assignment is invisible to
+    // Apps Script simple triggers and the editor Run dropdown.
+    expect(source).toMatch(/\bfunction\s+onOpen\s*\(/);
+    expect(source).toMatch(/\bfunction\s+onInstall\s*\(/);
+    expect(source).toContain("__DEDUP_ENTRY_POINTS__");
     expect(source).not.toMatch(/\bimport\s*[\({]/);
     expect(source).not.toMatch(/\brequire\s*\(/);
-    expect(source).not.toMatch(/\bUrlFetchApp\b/);
-    // A bare `http` substring would also catch comments; forbid the protocol forms.
+    // Owned Railway relay may call UrlFetchApp; the URL itself is not hardcoded.
+    expect(source).toMatch(/\bUrlFetchApp\b/);
     expect(source).not.toMatch(/https?:\/\//i);
   });
 

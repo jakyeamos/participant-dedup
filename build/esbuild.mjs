@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 /**
  * G1: produce the clasp-ready `dist/` tree.
  *
- * - `Code.js` — one IIFE of the server, with §6 entry points installed on
- *   `globalThis` at load. No npm runtime, no module loader.
+ * - `Code.js` — one IIFE of the server (entry bag on `globalThis`) plus
+ *   top-level `function` shims so Apps Script can discover triggers/menus.
+ *   No npm runtime, no module loader.
  * - `Sidebar.html` — the template with CSS and the client IIFE inlined, so the
  *   sidebar never fetches a remote asset (§21.8).
  * - `appsscript.json` — copied verbatim from `src/`.
@@ -68,10 +69,65 @@ function buildSidebarHtml(js, css) {
     .replace("/* __SIDEBAR_JS__ */", js);
 }
 
+/**
+ * §6 allowlist, same order as `test/server/globals.test.ts`. Apps Script
+ * simple triggers and the editor Run menu only see top-level `function`
+ * declarations — an IIFE that assigns onto `globalThis` is invisible to them.
+ * Keep this list in lockstep with `ENTRY_POINTS` in `src/server/globals.ts`.
+ */
+const ENTRY_POINT_NAMES = [
+  "onOpen",
+  "onInstall",
+  "menuScanActiveSheet",
+  "menuOpenReviewSidebar",
+  "menuQueueFilters",
+  "menuApplyReviewedDecisions",
+  "menuViewChangeHistory",
+  "menuRefreshCurrentBatch",
+  "rpcBootstrap",
+  "rpcStartScan",
+  "rpcAdvanceScan",
+  "rpcGetQueuePage",
+  "rpcGetCluster",
+  "rpcSaveClusterDecision",
+  "rpcGetBatchSummary",
+  "rpcCreateApplyChallenge",
+  "rpcApplyBatch",
+  "rpcGetAuditPage",
+  "rpcCancelCurrentBatch",
+  "rpcRepairDuplicateIds",
+  "rpcFocusSourceRow",
+];
+
+/** Thin top-level shims that forward into the IIFE-installed entry bag. */
+function entryPointShims() {
+  const lines = [
+    "",
+    "// Top-level shims for Apps Script trigger / menu / google.script.run discovery.",
+    "// Real implementations live on globalThis.__DEDUP_ENTRY_POINTS__ (set by the IIFE).",
+  ];
+  for (const name of ENTRY_POINT_NAMES) {
+    lines.push(
+      `function ${name}() {`,
+      `  var bag = globalThis.__DEDUP_ENTRY_POINTS__;`,
+      `  if (!bag || typeof bag.${name} !== "function") {`,
+      `    throw new Error("${name} is not installed");`,
+      `  }`,
+      `  return bag.${name}.apply(this, arguments);`,
+      `}`,
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
 async function main() {
   mkdirSync(dist, { recursive: true });
 
   await bundle(path.join(src, "server", "globals.ts"), path.join(dist, "Code.js"));
+
+  // Append discovery shims after the IIFE so Apps Script can see `onOpen` etc.
+  const codePath = path.join(dist, "Code.js");
+  writeFileSync(codePath, readFileSync(codePath, "utf8") + entryPointShims(), "utf8");
 
   const clientJs = await bundle(path.join(src, "client", "sidebar.ts"), null);
   const clientCss = readFileSync(path.join(src, "client", "sidebar.css"), "utf8");
@@ -81,12 +137,18 @@ async function main() {
 
   // Fail closed if the server bundle still mentions the fake — that would mean
   // a production import path leaked test infrastructure into clasp.
-  const code = readFileSync(path.join(dist, "Code.js"), "utf8");
+  const code = readFileSync(codePath, "utf8");
   if (code.includes("FakeSheetsGateway")) {
     throw new Error("dist/Code.js unexpectedly includes FakeSheetsGateway");
   }
-  if (/\bUrlFetchApp\b/.test(code) || /https?:\/\//i.test(code) || /\brequire\s*\(/.test(code)) {
+  // UrlFetchApp is allowed only for the owned Railway scan relay. Hardcoded
+  // http(s) URLs and module loaders remain forbidden (API base URL comes from
+  // Script Properties at runtime).
+  if (/https?:\/\//i.test(code) || /\brequire\s*\(/.test(code)) {
     throw new Error("dist/Code.js failed the network / module-loader gate");
+  }
+  if (!/\bfunction\s+onOpen\s*\(/.test(code) || !code.includes("__DEDUP_ENTRY_POINTS__")) {
+    throw new Error("dist/Code.js is missing Apps Script entry-point shims");
   }
 
   console.log("built dist/Code.js, dist/Sidebar.html, dist/appsscript.json");

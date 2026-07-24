@@ -20,6 +20,12 @@ import { resolveSchema } from "@/server/schemaResolver";
 import { auditActor, tryResolveReviewer } from "@/server/identity";
 import { repairDuplicateIds } from "@/server/dedupIdService";
 import { advanceScan, cancelScan, startScan, stateFromBatch } from "@/server/scan/scanStateMachine";
+import {
+  advanceRemoteScan,
+  cancelRemoteScan,
+  shouldUseRemoteScan,
+  startRemoteScan,
+} from "@/server/scan/remoteScan";
 import { getQueuePage } from "@/server/review/queue";
 import { getClusterDetail } from "@/server/review/clusterDetail";
 import { saveClusterDecision } from "@/server/review/decisions";
@@ -45,6 +51,11 @@ export interface BootstrapData {
   /** The sheet the active batch was scanned from, empty when there is none. */
   sourceSheetName: string;
   counts: QueueCounts | null;
+  /**
+   * First queue page for a reviewable active batch, so the sidebar can paint
+   * without a second cold `rpcGetQueuePage` round-trip.
+   */
+  queue: QueuePage | null;
   defaultFilters: { confidence: Confidence[]; statuses: ClusterStatus[] };
   /** §24 The exact sentence the reviewer must accept before an apply runs. */
   applyConfirmationText: string;
@@ -186,6 +197,31 @@ export function createHandlers(gateway: SheetsGateway): Handlers {
         const reviewer = tryResolveReviewer(gateway, request.fallbackName);
         const active = batchesRepository(gateway).getActive();
         const batchId = active ? String(active.batchId) : "";
+        const defaultFilters = {
+          confidence: [...DEFAULT_CONFIDENCE],
+          statuses: [...DEFAULT_STATUSES],
+        };
+        // One page for reviewable batches — avoids a second cold RPC on open.
+        const reviewable =
+          active !== null &&
+          (active.status === "READY" ||
+            active.status === "APPLIED" ||
+            active.status === "APPLYING" ||
+            active.status === "PAUSED");
+        const queue =
+          batchId !== "" && reviewable
+            ? getQueuePage(
+                gateway,
+                {
+                  batchId,
+                  confidence: defaultFilters.confidence,
+                  statuses: defaultFilters.statuses,
+                  cursor: null,
+                  pageSize: cfg.execution.queuePageSize,
+                },
+                cfg,
+              )
+            : null;
 
         return {
           identity: {
@@ -196,28 +232,41 @@ export function createHandlers(gateway: SheetsGateway): Handlers {
           activeSheetName: gateway.getActiveSheetName(),
           activeBatch: active ? stateFromBatch(active) : null,
           sourceSheetName: active ? String(active.sourceSheetName ?? "") : "",
-          counts: batchId === "" ? null : getQueuePage(gateway, { batchId, pageSize: 1 }, cfg).counts,
-          defaultFilters: {
-            confidence: [...DEFAULT_CONFIDENCE],
-            statuses: [...DEFAULT_STATUSES],
-          },
+          counts: queue?.counts ?? null,
+          queue,
+          defaultFilters,
           applyConfirmationText: APPLY_CONFIRMATION_TEXT,
         };
       });
     },
 
     rpcStartScan(request: StartScanRequest): RpcResult<ScanState> {
-      return runRpc(request, () =>
-        startScan(gateway, sheetNameFor(request.sheetName), config(), request.fallbackName),
-      );
+      return runRpc(request, () => {
+        const sheetName = sheetNameFor(request.sheetName);
+        const cfg = config();
+        if (shouldUseRemoteScan()) {
+          return startRemoteScan(gateway, sheetName, cfg, request.fallbackName);
+        }
+        return startScan(gateway, sheetName, cfg, request.fallbackName);
+      });
     },
 
     rpcAdvanceScan(request: RpcRequest = {}): RpcResult<ScanState> {
-      return runRpc(request, () => advanceScan(gateway, config(), request.fallbackName));
+      return runRpc(request, () => {
+        if (shouldUseRemoteScan()) {
+          return advanceRemoteScan(gateway, request.fallbackName);
+        }
+        return advanceScan(gateway, config(), request.fallbackName);
+      });
     },
 
     rpcCancelCurrentBatch(request: RpcRequest = {}): RpcResult<ScanState> {
-      return runRpc(request, () => cancelScan(gateway, config(), request.fallbackName));
+      return runRpc(request, () => {
+        if (shouldUseRemoteScan()) {
+          return cancelRemoteScan(gateway, request.fallbackName);
+        }
+        return cancelScan(gateway, config(), request.fallbackName);
+      });
     },
 
     rpcGetQueuePage(request: QueuePageRpcRequest): RpcResult<QueuePage> {

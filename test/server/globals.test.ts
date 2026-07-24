@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTRY_POINTS, installEntryPoints } from "@/server/globals";
+import { ENTRY_POINTS, ENTRY_POINTS_BAG, installEntryPoints } from "@/server/globals";
 
 /**
  * §6 verbatim, in spec order. A name added to the bundle's global surface has to
@@ -7,8 +7,10 @@ import { ENTRY_POINTS, installEntryPoints } from "@/server/globals";
  */
 const ALLOWLIST = [
   "onOpen",
+  "onInstall",
   "menuScanActiveSheet",
   "menuOpenReviewSidebar",
+  "menuQueueFilters",
   "menuApplyReviewedDecisions",
   "menuViewChangeHistory",
   "menuRefreshCurrentBatch",
@@ -37,6 +39,7 @@ describe("global entry points", () => {
     const menuTargets = [
       "menuScanActiveSheet",
       "menuOpenReviewSidebar",
+      "menuQueueFilters",
       "menuRefreshCurrentBatch",
       "menuApplyReviewedDecisions",
       "menuViewChangeHistory",
@@ -47,14 +50,23 @@ describe("global entry points", () => {
     }
   });
 
-  it("installs the whole allowlist and nothing else", () => {
+  it("installs the allowlist onto a target plus the entry bag", () => {
     const target: Record<string, unknown> = {};
     installEntryPoints(target);
 
-    expect(Object.keys(target).sort()).toEqual([...ALLOWLIST].sort());
+    expect(Object.keys(target).sort()).toEqual([...ALLOWLIST, ENTRY_POINTS_BAG].sort());
+    expect(target[ENTRY_POINTS_BAG]).toBe(ENTRY_POINTS);
     for (const name of ALLOWLIST) {
       expect(typeof target[name]).toBe("function");
     }
+  });
+
+  it("can install the bag without copying names (Apps Script shim mode)", () => {
+    const target: Record<string, unknown> = {};
+    installEntryPoints(target, { installNames: false });
+
+    expect(Object.keys(target)).toEqual([ENTRY_POINTS_BAG]);
+    expect(target[ENTRY_POINTS_BAG]).toBe(ENTRY_POINTS);
   });
 
   it("builds no gateway until an entry point is called", () => {

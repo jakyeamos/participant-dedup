@@ -29,6 +29,8 @@ describe("isRetryable", () => {
       "NOT_CONFIRMED",
       "DUPLICATE_APPLY",
       "SCHEMA_CHANGED",
+      "SHEET_TOO_LARGE",
+      "BACKEND_NOT_CONFIGURED",
       "MISSING_REVIEWER_IDENTITY",
       "BATCH_NOT_FOUND",
     ] as const) {

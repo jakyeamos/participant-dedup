@@ -127,6 +127,8 @@ describe("rpcBootstrap", () => {
     expect(boot.activeBatch?.batchId).toBe(s.batchId);
     expect(boot.sourceSheetName).toBe(PEOPLE);
     expect(boot.counts?.total).toBeGreaterThan(0);
+    expect(boot.queue?.counts.total).toBe(boot.counts?.total);
+    expect(boot.queue?.items.length).toBeGreaterThan(0);
     // §21.4 High and Medium checked, Low unchecked, Unreviewed checked.
     expect(boot.defaultFilters.confidence).toEqual(["HIGH", "MEDIUM"]);
     expect(boot.defaultFilters.statuses).toEqual(["UNREVIEWED", "IN_PROGRESS"]);
