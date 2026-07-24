@@ -605,17 +605,17 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 ### Task F2: Vanilla sidebar
 
 **Files:**
-- Create: `src/client/Sidebar.html`, `src/client/sidebar.js`, `src/client/sidebar.css`
+- Create: `src/client/Sidebar.template.html`, `src/client/sidebar.ts`, `src/client/sidebar.css`, `src/client/dom.ts`, `src/client/rpc.ts`, `src/client/session.ts`, `src/client/views/*`
 - Test: `test/client/sidebar.render.test.ts` (jsdom)
 
 **Interfaces:**
 - Produces: views (§21.1) Scan / Queue / Cluster review / Summary / Confirm / History; renders every participant value via `textContent` (§21.8, never innerHTML); default queue filter High+Medium (AT-25); identity fallback stored in `sessionStorage` only (§21.3); calls `google.script.run` for each `rpc*`.
 
-- [ ] **Step 1: Write failing jsdom test:** a render function given a cluster with a value containing `<script>` inserts it via `textContent` (assert `el.innerHTML` shows escaped text, no live node); default filter shows only HIGH/MEDIUM rows.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** the sidebar. Keep DOM-building functions pure/importable so jsdom can test them without Apps Script.
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "feat: vanilla sidebar with safe textContent rendering"`
+- [x] **Step 1: Write failing jsdom test:** a render function given a cluster with a value containing `<script>` inserts it via `textContent` (assert `el.innerHTML` shows escaped text, no live node); default filter shows only HIGH/MEDIUM rows.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** the sidebar. Keep DOM-building functions pure/importable so jsdom can test them without Apps Script.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit.** `git commit -m "feat: vanilla sidebar with safe textContent rendering"`
 
 ---
 

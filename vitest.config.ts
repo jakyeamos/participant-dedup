@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Only the sidebar needs a DOM; the engine stays in plain node.
+    environmentMatchGlobs: [["test/client/**", "jsdom"]],
     include: ["test/**/*.test.ts"],
     globals: false,
   },

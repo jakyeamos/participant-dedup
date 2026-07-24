@@ -15,8 +15,10 @@
   "devDependencies": {
     "@google/clasp": "^2.4.2",
     "@types/google-apps-script": "^1.0.83",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^26.1.1",
     "esbuild": "^0.24.0",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

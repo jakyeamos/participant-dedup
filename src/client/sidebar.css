@@ -1,0 +1,377 @@
+/**
+ * §21.8 Sidebar chrome only. No remote fonts, no remote assets, no third-party
+ * CSS. Participant values never enter this file — they are painted with
+ * textContent by the view modules.
+ */
+
+:root {
+  --dd-bg: #f7f5f1;
+  --dd-surface: #ffffff;
+  --dd-ink: #1c1917;
+  --dd-muted: #57534e;
+  --dd-line: #d6d3d1;
+  --dd-accent: #0f766e;
+  --dd-accent-ink: #ffffff;
+  --dd-danger: #b91c1c;
+  --dd-warn-bg: #fef3c7;
+  --dd-warn-ink: #92400e;
+  --dd-high: #166534;
+  --dd-medium: #a16207;
+  --dd-low: #57534e;
+  --dd-pad: 12px;
+  --dd-radius: 6px;
+  /* Local-only stack: §21.8 forbids remote fonts in the sidebar. */
+  --dd-font: "Lucida Grande", "Segoe UI", Tahoma, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--dd-bg);
+  color: var(--dd-ink);
+  font: 13px/1.45 var(--dd-font);
+}
+
+#app {
+  min-height: 100vh;
+  padding: var(--dd-pad);
+}
+
+.dd-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dd-heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.dd-subheading {
+  margin: 8px 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.dd-message,
+.dd-hint,
+.dd-code {
+  margin: 0;
+}
+
+.dd-hint,
+.dd-code {
+  color: var(--dd-muted);
+}
+
+.dd-warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--dd-radius);
+  background: var(--dd-warn-bg);
+  color: var(--dd-warn-ink);
+}
+
+.dd-button {
+  appearance: none;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+  color: var(--dd-ink);
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dd-button:hover:not(:disabled) {
+  border-color: var(--dd-accent);
+}
+
+.dd-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dd-button.dd-danger {
+  background: var(--dd-danger);
+  border-color: var(--dd-danger);
+  color: #fff;
+}
+
+.dd-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.dd-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+}
+
+.dd-stat-label {
+  color: var(--dd-muted);
+  font-size: 11px;
+}
+
+.dd-stat-value {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.dd-filters,
+.dd-modes,
+.dd-conflict {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+}
+
+.dd-filter-legend {
+  padding: 0 4px;
+  font-weight: 650;
+}
+
+.dd-choice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+  cursor: pointer;
+}
+
+.dd-choice-label {
+  flex: 1;
+}
+
+.dd-choice-hint {
+  display: block;
+  color: var(--dd-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.dd-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dd-queue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dd-queue-row:hover {
+  border-color: var(--dd-accent);
+}
+
+.dd-queue-label {
+  font-weight: 650;
+}
+
+.dd-queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--dd-muted);
+  font-size: 12px;
+}
+
+.dd-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e7e5e4;
+  color: var(--dd-ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.dd-confidence-high {
+  background: #dcfce7;
+  color: var(--dd-high);
+}
+
+.dd-confidence-medium {
+  background: #fef9c3;
+  color: var(--dd-medium);
+}
+
+.dd-confidence-low {
+  background: #e7e5e4;
+  color: var(--dd-low);
+}
+
+.dd-suggested {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.dd-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.dd-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dd-record {
+  padding: 10px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+}
+
+.dd-record-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.dd-record-label {
+  font-weight: 650;
+}
+
+.dd-record-fields {
+  display: grid;
+  grid-template-columns: minmax(72px, 30%) 1fr;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+}
+
+.dd-field-name {
+  margin: 0;
+  color: var(--dd-muted);
+}
+
+.dd-field-name.dd-differs {
+  color: var(--dd-warn-ink);
+  font-weight: 650;
+}
+
+.dd-field-value {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dd-field-value.dd-blank {
+  color: var(--dd-muted);
+  font-style: italic;
+}
+
+.dd-field,
+.dd-targets .dd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dd-field-label {
+  font-weight: 650;
+}
+
+.dd-input,
+.dd-select,
+.dd-notes {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+  color: var(--dd-ink);
+  font: inherit;
+}
+
+.dd-notes {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.dd-plan,
+.dd-targets {
+  padding: 8px;
+  border: 1px solid var(--dd-line);
+  border-radius: var(--dd-radius);
+  background: var(--dd-surface);
+}
+
+.dd-plan-list,
+.dd-plan-issues,
+.dd-warnings,
+.dd-events {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.dd-plan-fill,
+.dd-event-change {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.dd-plan-source,
+.dd-event-arrow {
+  color: var(--dd-muted);
+}
+
+.dd-event {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dd-line);
+  list-style: none;
+}
+
+.dd-events {
+  padding-left: 0;
+}
+
+.dd-event-head,
+.dd-event-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dd-event-type {
+  font-weight: 650;
+}
+
+.dd-event-error {
+  color: var(--dd-danger);
+}
