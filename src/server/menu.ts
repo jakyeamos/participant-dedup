@@ -11,7 +11,7 @@ const MENU_TITLE = "Deduplication";
 const SIDEBAR_TITLE = "Participant Deduplication";
 
 /** §21.1 The view the sidebar opens on. */
-export type SidebarView = "BOOTSTRAP" | "APPLY_CONFIRMATION" | "AUDIT_HISTORY";
+export type SidebarView = "BOOTSTRAP" | "APPLY_CONFIRMATION" | "AUDIT_HISTORY" | "QUEUE_FILTERS";
 
 /**
  * What the menu tells the sidebar on load. Serialized into the page by
@@ -39,6 +39,7 @@ export function onOpen(): void {
     .createMenu(MENU_TITLE)
     .addItem("Scan Active Sheet", "menuScanActiveSheet")
     .addItem("Open Review Sidebar", "menuOpenReviewSidebar")
+    .addItem("Queue Filters", "menuQueueFilters")
     .addItem("Refresh Current Batch", "menuRefreshCurrentBatch")
     .addItem("Apply Reviewed Decisions", "menuApplyReviewedDecisions")
     .addItem("View Change History", "menuViewChangeHistory")
@@ -49,8 +50,18 @@ export function onOpen(): void {
 }
 
 /**
- * §6.1 Opens the sidebar and lets it drive the scan slice by slice. The scan is
- * deliberately not run here: it must be resumable and interruptible.
+ * Editor add-ons receive `onInstall` when a user installs them from the Sheets
+ * UI. Delegating to `onOpen` makes the Deduplication menu appear immediately
+ * after install without doing privileged work under limited auth.
+ */
+export function onInstall(): void {
+  onOpen();
+}
+
+/**
+ * §6.1 Opens the sidebar and gets the reviewer to a useful state: resume a
+ * mid-scan batch, show an existing READY queue, or start a scan when there is
+ * nothing to resume. A forced rescan is the queue's "Scan again" control.
  */
 export function menuScanActiveSheet(): void {
   showSidebar({ view: "BOOTSTRAP", autoStart: true });
@@ -58,6 +69,10 @@ export function menuScanActiveSheet(): void {
 
 export function menuOpenReviewSidebar(): void {
   showSidebar({ view: "BOOTSTRAP", autoStart: false });
+}
+
+export function menuQueueFilters(): void {
+  showSidebar({ view: "QUEUE_FILTERS", autoStart: false });
 }
 
 export function menuRefreshCurrentBatch(): void {

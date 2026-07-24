@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderQueue, renderQueueFilters, readQueueFilters } from "@/client/views/queue";
+import { renderQueue, renderQueueFilters, readQueueFilters, renderFilterSettings } from "@/client/views/queue";
 import { readDecision, renderClusterReview } from "@/client/views/cluster";
-import { renderError, renderIdentityRequired, renderScanProgress } from "@/client/views/status";
+import {
+  renderError,
+  renderIdentityRequired,
+  renderLoading,
+  renderScanProgress,
+} from "@/client/views/status";
 import { renderApplyConfirmation, renderApplyResult, renderBatchSummary } from "@/client/views/apply";
 import { renderHistory } from "@/client/views/history";
 import { clearFallbackName, readFallbackName, writeFallbackName } from "@/client/session";
@@ -26,7 +31,7 @@ const noopClusterHandlers = {
 };
 
 const noopQueueHandlers = {
-  onFiltersChange: vi.fn(),
+  onOpenFilters: vi.fn(),
   onOpenCluster: vi.fn(),
   onLoadMore: vi.fn(),
   onReviewSummary: vi.fn(),
@@ -60,6 +65,19 @@ describe("§21.8 safe rendering", () => {
 
     expect(view.querySelector("script")).toBeNull();
     expect(view.textContent).toContain(HOSTILE);
+  });
+
+  it("offers Scan again when a rescan handler is provided", () => {
+    const onRescan = vi.fn();
+    const view = renderQueue(
+      queuePage({ items: [queueItem()] }),
+      { confidence: ["HIGH"], statuses: ["UNREVIEWED"] },
+      { ...noopQueueHandlers, onRescan },
+    );
+    const control = view.querySelector('[data-action="rescan"]') as HTMLButtonElement;
+    expect(control).toBeTruthy();
+    control.click();
+    expect(onRescan).toHaveBeenCalledOnce();
   });
 
   it("renders hostile audit values as text", () => {
@@ -108,7 +126,7 @@ describe("§21.4 default queue filters", () => {
     expect(readQueueFilters(form).confidence).toEqual(["HIGH", "MEDIUM", "LOW"]);
   });
 
-  it("lists only the clusters the page returned", () => {
+  it("keeps the filter form off the queue and behind Change filters", () => {
     const view = renderQueue(
       queuePage({
         items: [
@@ -120,8 +138,37 @@ describe("§21.4 default queue filters", () => {
       noopQueueHandlers,
     );
 
+    expect(view.querySelector("form.dd-filters")).toBeNull();
+    expect(view.textContent).toContain("Showing: High, Medium · Unreviewed");
+    expect(view.querySelector('[data-action="open-filters"]')).not.toBeNull();
+
     const rows = view.querySelectorAll("[data-cluster-id]");
     expect(Array.from(rows).map((r) => r.getAttribute("data-cluster-id"))).toEqual(["c1", "c2"]);
+  });
+
+  it("saves filters from the dedicated filter screen", () => {
+    const onSave = vi.fn();
+    const view = renderFilterSettings(
+      { confidence: ["HIGH"], statuses: ["UNREVIEWED"] },
+      { onSave, onBack: vi.fn() },
+    );
+
+    view.querySelector<HTMLInputElement>('input[name="confidence"][value="MEDIUM"]')!.checked = true;
+    view.querySelector<HTMLButtonElement>('[data-action="save-filters"]')!.click();
+
+    expect(onSave).toHaveBeenCalledWith({
+      confidence: ["HIGH", "MEDIUM"],
+      statuses: ["UNREVIEWED"],
+    });
+  });
+});
+
+describe("loading state", () => {
+  it("renders an immediate loading screen", () => {
+    const view = renderLoading("Opening…");
+    expect(view.getAttribute("data-view")).toBe("LOADING");
+    expect(view.textContent).toContain("Opening…");
+    expect(view.querySelector(".dd-progress-indeterminate")).not.toBeNull();
   });
 });
 
@@ -173,6 +220,47 @@ describe("§21.6 cluster review", () => {
     });
   });
 
+  it("lets Keep this record select Choose records to keep", () => {
+    const detail = clusterDetail();
+    const view = renderClusterReview(detail, noopClusterHandlers);
+
+    const retain = view.querySelector<HTMLInputElement>('input[name="retain"][value="DD-0001"]')!;
+    expect(retain.disabled).toBe(false);
+    retain.checked = true;
+    retain.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(
+      view.querySelector<HTMLInputElement>('input[name="mode"][value="SELECT_RECORDS"]')!.checked,
+    ).toBe(true);
+    expect(readDecision(view, detail)).toMatchObject({
+      mode: "SELECT_RECORDS",
+      retainedIds: ["DD-0001"],
+      deleteAssignments: { "DD-0002": "DD-0001" },
+    });
+    expect(view.querySelector<HTMLButtonElement>('[data-action="save"]')!.disabled).toBe(false);
+  });
+
+  it("hides the merge-target region until more than one record is kept", () => {
+    const detail = clusterDetail();
+    const view = renderClusterReview(detail, noopClusterHandlers);
+    const targets = view.querySelector<HTMLElement>('[data-region="targets"]')!;
+
+    expect(targets.hidden).toBe(true);
+
+    const select = view.querySelector<HTMLInputElement>('input[name="mode"][value="SELECT_RECORDS"]')!;
+    select.checked = true;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(targets.hidden).toBe(true);
+
+    for (const id of ["DD-0001", "DD-0002"]) {
+      const retain = view.querySelector<HTMLInputElement>(`input[name="retain"][value="${id}"]`)!;
+      retain.checked = true;
+      retain.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    // Both kept — nothing to merge into, so still hidden.
+    expect(targets.hidden).toBe(true);
+  });
+
   it("refuses a select-records decision that retains nothing", () => {
     const detail = clusterDetail();
     const view = renderClusterReview(detail, noopClusterHandlers);
@@ -197,24 +285,49 @@ describe("§21.6 cluster review", () => {
     buttons[0]!.click();
     expect(noopClusterHandlers.onFocusRow).toHaveBeenCalledWith("DD-0001");
   });
+
+  it("hides _Dedup_ID and columns that are blank on every record", () => {
+    const detail = clusterDetail({
+      headers: ["_Dedup_ID", "First", "Last", "Phone", "", "Notes"],
+      records: [
+        clusterRecord({
+          values: ["id-1", "Ada", "Lovelace", "555-0100", "", ""],
+        }),
+        clusterRecord({
+          dedupId: "DD-0002",
+          sourceRow: 40,
+          values: ["id-2", "Ada", "Lovelace", "", "", ""],
+        }),
+      ],
+      differingHeaders: ["Phone"],
+    });
+    const view = renderClusterReview(detail, noopClusterHandlers);
+    const names = Array.from(view.querySelectorAll(".dd-field-name")).map((n) => n.textContent);
+
+    expect(names).toEqual(["First", "Last", "Phone", "First", "Last", "Phone"]);
+    expect(names).not.toContain("_Dedup_ID");
+    expect(names).not.toContain("Notes");
+    expect(view.querySelectorAll(".dd-field-value.dd-blank")).toHaveLength(1);
+  });
 });
 
 describe("§24 apply confirmation", () => {
-  it("keeps apply disabled until the exact sentence is typed", () => {
-    const view = renderApplyConfirmation(challenge(), batchSummary(), "DELETE 2 ROWS", {
+  it("keeps apply disabled until confirm is typed exactly", () => {
+    const view = renderApplyConfirmation(challenge(), batchSummary(), "confirm", {
       onApply: vi.fn(),
       onBack: vi.fn(),
     });
 
     const apply = view.querySelector<HTMLButtonElement>('[data-action="apply"]')!;
     const field = view.querySelector<HTMLInputElement>('[data-field="confirmation"]')!;
+    expect(view.textContent).toContain('Type "confirm" exactly');
     expect(apply.disabled).toBe(true);
 
-    field.value = "delete 2 rows";
+    field.value = "Confirm";
     field.dispatchEvent(new Event("input", { bubbles: true }));
     expect(apply.disabled).toBe(true);
 
-    field.value = "DELETE 2 ROWS";
+    field.value = "confirm";
     field.dispatchEvent(new Event("input", { bubbles: true }));
     expect(apply.disabled).toBe(false);
   });
@@ -263,19 +376,53 @@ describe("error and identity views", () => {
     expect(onSubmit).toHaveBeenCalledWith("Reviewer One");
   });
 
-  it("shows scan progress without claiming a total it does not have", () => {
+  it("shows estimated scan progress with ETA and real counters", () => {
     const view = renderScanProgress(
       {
         batchId: "b1",
         status: "SCORING",
         phase: "SCORING",
-        metrics: { records: 500, candidates: 1200, qualifiedEdges: 40, clusters: 0 },
+        metrics: {
+          records: 500,
+          candidates: 1200,
+          qualifiedEdges: 40,
+          clusters: 0,
+          sourceRows: 500,
+        },
+        warnings: [],
       },
       { onCancel: vi.fn() },
+      { elapsedMs: 30_000 },
     );
 
+    const bar = view.querySelector<HTMLElement>('[role="progressbar"]')!;
+    expect(bar.getAttribute("aria-valuenow")).toBe("63");
+    expect(view.textContent).toContain("63%");
+    expect(view.textContent).toContain("remaining");
     expect(view.querySelector('[data-stat="records"]')!.textContent).toBe("500");
     expect(view.querySelector('[data-action="cancel"]')).not.toBeNull();
+  });
+
+  it("interpolates snapshot progress from records written", () => {
+    const view = renderScanProgress(
+      {
+        batchId: "b1",
+        status: "SNAPSHOTTING",
+        phase: "SNAPSHOTTING",
+        metrics: {
+          records: 1500,
+          candidates: 0,
+          qualifiedEdges: 0,
+          clusters: 0,
+          sourceRows: 3000,
+        },
+        warnings: [],
+      },
+      { onCancel: vi.fn() },
+      { elapsedMs: 20_000 },
+    );
+    // Midpoint of 5–35 band at 50% of rows → 20%
+    expect(view.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow")).toBe("20");
   });
 });
 

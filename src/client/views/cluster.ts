@@ -1,13 +1,15 @@
 import type { ClusterDetail, ClusterDetailRecord } from "@/server/review/clusterDetail";
 import type { MergePlan } from "@/server/review/mergePlan";
 import type { ClusterDecision, FieldChoice } from "@/server/types";
+import { DEDUP_ID_HEADER } from "@/shared/constants";
 import { append, button, checkedValues, clear, el, humanize, radio, view } from "@/client/dom";
 
 /**
  * §21.6 The review screen. Everything a reviewer needs to judge one group of
  * records, and nothing that would judge it for them: no mode is preselected, no
  * record is marked for deletion, and `Save decision` stays disabled until the
- * reviewer has made a choice the server can act on.
+ * reviewer has made a choice the server can act on. Ticking "Keep this record"
+ * selects "Choose records to keep" for them.
  */
 
 export interface ClusterHandlers {
@@ -27,6 +29,19 @@ const MODE_LABELS: Array<[DecisionMode, string, string]> = [
 function valueOf(record: ClusterDetailRecord, headerIndex: number): string {
   const value = record.values[headerIndex];
   return value === undefined || value === "" ? "" : value;
+}
+
+/**
+ * §21.6 Compact cards: skip `_Dedup_ID`, unnamed trailing columns, and fields
+ * that are blank on every record. Keep a shared header set across cards so a
+ * blank on one side still lines up with a filled value on the other.
+ */
+export function visibleFieldIndexes(detail: ClusterDetail): number[] {
+  return detail.headers.flatMap((header, index) => {
+    if (header.trim() === "" || header === DEDUP_ID_HEADER) return [];
+    if (!detail.records.some((record) => valueOf(record, index) !== "")) return [];
+    return [index];
+  });
 }
 
 function checkedMode(root: ParentNode): DecisionMode | null {
@@ -65,7 +80,8 @@ function recordCard(
 
   const fields = el("dl", "dd-record-fields");
   const differing = new Set(detail.differingHeaders);
-  detail.headers.forEach((header, index) => {
+  for (const index of visibleFieldIndexes(detail)) {
+    const header = detail.headers[index]!;
     const value = valueOf(record, index);
     const term = el("dt", differing.has(header) ? "dd-field-name dd-differs" : "dd-field-name");
     term.textContent = header;
@@ -75,7 +91,7 @@ function recordCard(
       value === "" ? "(blank)" : value,
     );
     append(fields, term, definition);
-  });
+  }
   append(card, fields);
 
   const retain = el("label", "dd-choice dd-retain");
@@ -83,8 +99,6 @@ function recordCard(
   box.type = "checkbox";
   box.name = "retain";
   box.value = record.dedupId;
-  box.disabled = true;
-  retain.hidden = true;
   append(retain, box, el("span", "dd-choice-label", "Keep this record"));
   append(card, retain);
 
@@ -313,12 +327,19 @@ function renderTargets(
   previous: Map<string, string>,
 ): void {
   clear(region);
-  if (retainedIds.length < 2) return;
+  if (retainedIds.length < 2) {
+    region.hidden = true;
+    return;
+  }
 
   const retained = new Set(retainedIds);
   const pending = coreIds(detail).filter((id) => !retained.has(id));
-  if (pending.length === 0) return;
+  if (pending.length === 0) {
+    region.hidden = true;
+    return;
+  }
 
+  region.hidden = false;
   append(region, el("h3", "dd-subheading", "Which record should each deletion merge into?"));
 
   for (const dedupId of pending) {
@@ -384,14 +405,16 @@ export function renderClusterReview(
       ),
     );
   }
+  const shown = new Set(visibleFieldIndexes(detail).map((i) => detail.headers[i]!));
+  const differingShown = detail.differingHeaders.filter((header) => shown.has(header));
   append(
     section,
     el(
       "p",
       "dd-message",
-      detail.differingHeaders.length === 0
+      differingShown.length === 0
         ? "These records agree on every column shown."
-        : `They differ on: ${detail.differingHeaders.join(", ")}`,
+        : `They differ on: ${differingShown.join(", ")}`,
     ),
   );
 
@@ -399,6 +422,7 @@ export function renderClusterReview(
   for (const record of detail.records) append(records, recordCard(detail, record, handlers));
   append(section, records);
 
+  // Retain checkboxes on the cards above auto-select "Choose records to keep".
   const modes = el("fieldset", "dd-modes");
   append(modes, el("legend", "dd-filter-legend", "Your decision"));
   for (const [value, label, hint] of MODE_LABELS) {
@@ -410,6 +434,7 @@ export function renderClusterReview(
 
   const targets = el("div", "dd-targets");
   targets.setAttribute("data-region", "targets");
+  targets.hidden = true;
   append(section, targets);
 
   if (detail.plan) append(section, planRegion(detail, detail.plan));
@@ -437,13 +462,6 @@ export function renderClusterReview(
     section.setAttribute("data-mode", mode ?? "");
 
     const selecting = mode === "SELECT_RECORDS";
-    for (const input of retainInputs(section)) {
-      input.disabled = !selecting;
-      if (!selecting) input.checked = false;
-      const wrapper = input.closest(".dd-retain");
-      if (wrapper instanceof HTMLElement) wrapper.hidden = !selecting;
-    }
-
     for (const select of Array.from(
       section.querySelectorAll<HTMLSelectElement>("[data-target-for]"),
     )) {
@@ -460,7 +478,24 @@ export function renderClusterReview(
     save.disabled = readDecision(section, detail) === null;
   }
 
-  section.addEventListener("change", refresh);
+  section.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      refresh();
+      return;
+    }
+    // Ticking "Keep this record" is enough — select the matching decision mode.
+    if (target.name === "retain" && target.checked) {
+      const selectMode = section.querySelector<HTMLInputElement>(
+        'input[name="mode"][value="SELECT_RECORDS"]',
+      );
+      if (selectMode) selectMode.checked = true;
+    }
+    if (target.name === "mode" && target.value !== "SELECT_RECORDS") {
+      for (const input of retainInputs(section)) input.checked = false;
+    }
+    refresh();
+  });
   refresh();
   return section;
 }

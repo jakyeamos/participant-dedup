@@ -68,7 +68,7 @@ export interface ConfirmHandlers {
 }
 
 /**
- * §24 The typed confirmation. The sentence must match exactly, including case:
+ * §24 The typed confirmation. The token must match exactly, including case:
  * this is the last screen before rows leave the sheet permanently, and a
  * checkbox is too easy to click past. The button starts disabled and is enabled
  * only by the exact string, never by a prefix or a case-insensitive match.
@@ -92,10 +92,18 @@ export function renderApplyConfirmation(
   );
   append(section, stats);
 
-  append(section, el("p", "dd-warning", expectedText));
   append(
     section,
-    el("p", "dd-hint", "Type the sentence above exactly as it appears, then choose Apply."),
+    el(
+      "p",
+      "dd-warning",
+      "Selected rows will be permanently removed from the participant sheet and no full-sheet " +
+        "backup will be created.",
+    ),
+  );
+  append(
+    section,
+    el("p", "dd-hint", `Type "${expectedText}" exactly, then choose Apply.`),
   );
 
   const field = el("input", "dd-input");

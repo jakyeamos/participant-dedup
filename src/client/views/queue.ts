@@ -10,16 +10,22 @@ export interface QueueFilters {
 }
 
 export interface QueueHandlers {
-  onFiltersChange(filters: QueueFilters): void;
+  onOpenFilters(): void;
   onOpenCluster(clusterId: string): void;
   onLoadMore(): void;
   onReviewSummary(): void;
+  /** Optional — starts a fresh scan without leaving the sidebar. */
+  onRescan?(): void;
+}
+
+export interface FilterHandlers {
+  onSave(filters: QueueFilters): void;
+  onBack(): void;
 }
 
 /**
- * §21.4 The filter form. The defaults live with the caller, not here: the
- * controller is what knows whether this is a fresh queue (High and Medium,
- * unreviewed) or a queue the reviewer has already narrowed.
+ * §21.4 The filter form. Lives on its own screen (and the Deduplication menu),
+ * not inline on the queue — the queue needs the vertical space for comparison.
  */
 export function renderQueueFilters(filters: QueueFilters): HTMLFormElement {
   const form = el("form", "dd-filters");
@@ -49,6 +55,48 @@ export function readQueueFilters(root: ParentNode): QueueFilters {
     confidence: checkedValues(root, "confidence") as Confidence[],
     statuses: checkedValues(root, "status") as ClusterStatus[],
   };
+}
+
+/** One-line summary for the queue header (filters live elsewhere). */
+export function summarizeFilters(filters: QueueFilters): string {
+  const confidence =
+    filters.confidence.length === 0
+      ? "no confidence"
+      : filters.confidence.map(humanize).join(", ");
+  const statuses =
+    filters.statuses.length === 0 ? "no status" : filters.statuses.map(humanize).join(", ");
+  return `${confidence} · ${statuses}`;
+}
+
+/**
+ * Dedicated filter screen — opened from the Deduplication menu or the queue's
+ * "Change filters" control.
+ */
+export function renderFilterSettings(
+  filters: QueueFilters,
+  handlers: FilterHandlers,
+): HTMLElement {
+  const section = view("QUEUE_FILTERS", "Queue filters");
+  append(
+    section,
+    el(
+      "p",
+      "dd-hint",
+      "These controls which groups appear in the review sidebar. They do not change the sheet.",
+    ),
+  );
+
+  const form = renderQueueFilters(filters);
+  append(section, form);
+
+  append(
+    section,
+    button("Save filters", "save-filters", () => {
+      handlers.onSave(readQueueFilters(form));
+    }),
+  );
+  append(section, button("Back", "back", handlers.onBack));
+  return section;
 }
 
 /**
@@ -96,11 +144,10 @@ export function renderQueue(
 ): HTMLElement {
   const section = view("QUEUE", "Possible duplicates");
 
-  const form = renderQueueFilters(filters);
-  form.addEventListener("change", () => {
-    handlers.onFiltersChange(readQueueFilters(form));
-  });
-  append(section, form);
+  const filterBar = el("div", "dd-filter-summary");
+  append(filterBar, el("p", "dd-hint", `Showing: ${summarizeFilters(filters)}`));
+  append(filterBar, button("Change filters", "open-filters", handlers.onOpenFilters));
+  append(section, filterBar);
 
   append(
     section,
@@ -124,5 +171,8 @@ export function renderQueue(
     append(section, button("Load more", "load-more", handlers.onLoadMore));
   }
   append(section, button("Review summary", "review-summary", handlers.onReviewSummary));
+  if (handlers.onRescan) {
+    append(section, button("Scan again", "rescan", handlers.onRescan));
+  }
   return section;
 }

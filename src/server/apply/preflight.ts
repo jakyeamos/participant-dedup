@@ -18,10 +18,8 @@ import { clusterFromRow } from "@/server/review/clusterRow";
 /** §23.2 The confirmation challenge outlives the execution that created it. */
 export const APPLY_CHALLENGE_STATE_TYPE = "APPLY_CHALLENGE";
 
-/** §23.2 Exact confirmation copy — the sidebar must render this verbatim. */
-export const APPLY_CONFIRMATION_TEXT =
-  "I understand that the selected rows will be permanently removed from the participant sheet " +
-  "and no full-sheet backup will be created.";
+/** §23.2 Exact confirmation token typed before a destructive apply. */
+export const APPLY_CONFIRMATION_TEXT = "confirm";
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 

@@ -10,6 +10,7 @@ import type { CreatedChallenge } from "@/server/apply/preflight";
 import type { ApplyResult } from "@/server/apply/applyDecisions";
 import type { HistoryPage } from "@/server/history";
 import type { BatchStatus } from "@/shared/constants";
+import { safeMessageFor, type DedupErrorCode } from "@/server/errors";
 import { clear } from "@/client/dom";
 import {
   createRpcClient,
@@ -17,7 +18,12 @@ import {
   isRpcError,
   type RpcClient,
 } from "@/client/rpc";
-import { readFallbackName, writeFallbackName } from "@/client/session";
+import {
+  readFallbackName,
+  readStoredQueueFilters,
+  writeFallbackName,
+  writeStoredQueueFilters,
+} from "@/client/session";
 import {
   renderApplyConfirmation,
   renderApplyResult,
@@ -25,11 +31,16 @@ import {
 } from "@/client/views/apply";
 import { renderClusterReview } from "@/client/views/cluster";
 import { renderHistory } from "@/client/views/history";
-import { renderQueue, type QueueFilters } from "@/client/views/queue";
+import {
+  renderFilterSettings,
+  renderQueue,
+  type QueueFilters,
+} from "@/client/views/queue";
 import {
   renderBootstrap,
   renderError,
   renderIdentityRequired,
+  renderLoading,
   renderScanProgress,
 } from "@/client/views/status";
 
@@ -74,7 +85,8 @@ function readBoot(): SidebarBoot {
     if (
       candidate.view === "BOOTSTRAP" ||
       candidate.view === "APPLY_CONFIRMATION" ||
-      candidate.view === "AUDIT_HISTORY"
+      candidate.view === "AUDIT_HISTORY" ||
+      candidate.view === "QUEUE_FILTERS"
     ) {
       return { view: candidate.view, autoStart: candidate.autoStart === true };
     }
@@ -92,7 +104,7 @@ function asError(thrown: unknown): RpcError {
   if (isRpcError(thrown)) return thrown;
   return {
     code: "INTERNAL",
-    message: "Something went wrong. Nothing was changed.",
+    message: "The spreadsheet took too long to respond. Try again — scan progress is usually saved.",
     retryable: true,
   };
 }
@@ -144,6 +156,10 @@ export function mountSidebar(
     root.appendChild(node);
   }
 
+  function showBusy(message = "Loading…"): void {
+    show(renderLoading(message));
+  }
+
   function fail(thrown: unknown, retry: (() => void) | null = null): void {
     state.scanning = false;
     state.retry = retry;
@@ -174,6 +190,33 @@ export function mountSidebar(
     );
   }
 
+  function openFilters(): void {
+    show(
+      renderFilterSettings(state.filters, {
+        onSave: (filters) => {
+          state.filters = filters;
+          writeStoredQueueFilters(filters);
+          void run(async () => {
+            if (state.batchId !== "") {
+              await loadQueue(true);
+              return;
+            }
+            showLanding();
+          });
+        },
+        onBack: () => {
+          void run(async () => {
+            if (state.batchId !== "") {
+              await loadQueue(true);
+              return;
+            }
+            showLanding();
+          });
+        },
+      }),
+    );
+  }
+
   async function call<T>(name: string, request: Record<string, unknown> = {}): Promise<T> {
     return rpc.call<T>(name, withIdentity(request));
   }
@@ -196,11 +239,15 @@ export function mountSidebar(
       };
     }
     state.queueCursor = page.nextCursor;
+    showQueueView();
+  }
+
+  function showQueueView(): void {
+    if (state.queue === null) return;
     show(
       renderQueue(state.queue, state.filters, {
-        onFiltersChange: (filters) => {
-          state.filters = filters;
-          void run(() => loadQueue(true));
+        onOpenFilters: () => {
+          openFilters();
         },
         onOpenCluster: (clusterId) => {
           void run(() => openCluster(clusterId));
@@ -211,8 +258,20 @@ export function mountSidebar(
         onReviewSummary: () => {
           void run(() => openSummary());
         },
+        onRescan: () => {
+          void run(async () => {
+            const started = await call<ScanState>("rpcStartScan", {});
+            await runScanLoop(started);
+          }, "Scanning…");
+        },
       }),
     );
+  }
+
+  function showBootQueue(page: QueuePage): void {
+    state.queue = page;
+    state.queueCursor = page.nextCursor;
+    showQueueView();
   }
 
   async function openCluster(clusterId: string): Promise<void> {
@@ -335,18 +394,23 @@ export function mountSidebar(
     let current = initial;
     state.scanning = true;
     state.batchId = current.batchId;
+    const startedAtMs = Date.now();
 
     while (state.scanning && isScanning(current)) {
       show(
-        renderScanProgress(current, {
-          onCancel: () => {
-            void run(async () => {
-              state.scanning = false;
-              await call<ScanState>("rpcCancelCurrentBatch", {});
-              await start();
-            });
+        renderScanProgress(
+          current,
+          {
+            onCancel: () => {
+              void run(async () => {
+                state.scanning = false;
+                await call<ScanState>("rpcCancelCurrentBatch", {});
+                await start();
+              });
+            },
           },
-        }),
+          { elapsedMs: Date.now() - startedAtMs },
+        ),
       );
       current = await call<ScanState>("rpcAdvanceScan", {});
       state.batchId = current.batchId;
@@ -355,16 +419,20 @@ export function mountSidebar(
     state.scanning = false;
 
     if (current.status === "FAILED") {
-      fail({
-        code: current.errorCode ?? "INTERNAL",
-        message: "The scan stopped before it finished. Nothing was deleted.",
-        retryable: true,
-      }, () => {
-        void run(async () => {
-          const started = await call<ScanState>("rpcStartScan", {});
-          await runScanLoop(started);
-        });
-      });
+      const code = (current.errorCode ?? "INTERNAL") as DedupErrorCode;
+      fail(
+        {
+          code,
+          message: safeMessageFor(code),
+          retryable: code !== "SHEET_TOO_LARGE" && code !== "DUPLICATE_DEDUP_ID",
+        },
+        () => {
+          void run(async () => {
+            const started = await call<ScanState>("rpcStartScan", {});
+            await runScanLoop(started);
+          });
+        },
+      );
       return;
     }
 
@@ -407,7 +475,8 @@ export function mountSidebar(
   async function start(): Promise<void> {
     const data = await call<BootstrapData>("rpcBootstrap", {});
     state.bootstrap = data;
-    state.filters = {
+    const stored = readStoredQueueFilters();
+    state.filters = stored ?? {
       confidence: [...data.defaultFilters.confidence],
       statuses: [...data.defaultFilters.statuses],
     };
@@ -419,6 +488,11 @@ export function mountSidebar(
 
     const active = data.activeBatch;
     if (active) state.batchId = active.batchId;
+
+    if (state.boot.view === "QUEUE_FILTERS") {
+      openFilters();
+      return;
+    }
 
     if (state.boot.view === "AUDIT_HISTORY") {
       await openHistory(true);
@@ -435,36 +509,51 @@ export function mountSidebar(
     }
 
     // BOOTSTRAP
+    // autoStart means "get to a useful state", not "always supersede and rescan".
+    // A READY/PAUSED/APPLIED batch paints from bootstrap.queue when present.
+    if (active && isScanning(active)) {
+      await runScanLoop(active);
+      return;
+    }
+
+    if (
+      active &&
+      (active.status === "READY" ||
+        active.status === "APPLIED" ||
+        active.status === "APPLYING" ||
+        active.status === "PAUSED")
+    ) {
+      if (data.queue) {
+        showBootQueue(data.queue);
+        return;
+      }
+      await loadQueue(true);
+      return;
+    }
+
     if (state.boot.autoStart) {
       const started = await call<ScanState>("rpcStartScan", {});
       await runScanLoop(started);
       return;
     }
 
-    if (active && isScanning(active)) {
-      await runScanLoop(active);
-      return;
-    }
-
-    if (active && (active.status === "READY" || active.status === "APPLIED" || active.status === "APPLYING" || active.status === "PAUSED")) {
-      await loadQueue(true);
-      return;
-    }
-
     showLanding();
   }
 
-  async function run(action: () => Promise<void>): Promise<void> {
+  async function run(action: () => Promise<void>, busyMessage = "Loading…"): Promise<void> {
+    showBusy(busyMessage);
     try {
       await action();
     } catch (thrown) {
       fail(thrown, () => {
-        void run(action);
+        void run(action, busyMessage);
       });
     }
   }
 
-  void run(start);
+  // Paint immediately so Apps Script round-trips never leave a blank panel.
+  showBusy("Opening…");
+  void run(start, "Opening…");
 }
 
 const pageRoot = typeof document !== "undefined" ? document.getElementById("app") : null;

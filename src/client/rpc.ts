@@ -20,7 +20,7 @@ export interface RpcClient {
 
 const INTERNAL: RpcError = {
   code: "INTERNAL",
-  message: "Something went wrong. Nothing was changed.",
+  message: "The spreadsheet took too long to respond. Try again — scan progress is usually saved.",
   retryable: true,
 };
 

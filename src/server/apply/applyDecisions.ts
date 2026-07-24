@@ -4,7 +4,7 @@ import type { DedupConfig } from "@/shared/config";
 import { DedupError } from "@/server/errors";
 import { actorTypeOf, resolveReviewer } from "@/server/identity";
 import { SYSTEM_SHEETS } from "@/shared/constants";
-import { CLUSTER_FIELDS, encodeRow, nowIso, tableFor } from "@/server/systemSheets";
+import { CLUSTER_FIELDS, encodeRow, invalidateTables, nowIso, tableFor } from "@/server/systemSheets";
 import { composeAuditRows } from "@/server/apply/audit";
 import { buildAtomicRequest, type SystemRowUpdate } from "@/server/apply/atomicRequest";
 import { preflight, type ApplyChallenge } from "@/server/apply/preflight";
@@ -135,6 +135,8 @@ export function applyDecisions(
     );
 
     gateway.batchUpdate(request);
+    // batchUpdate writes system rows outside SheetTable; drop the read cache.
+    invalidateTables(gateway);
 
     return {
       applyBatchId,
