@@ -10,6 +10,7 @@ tools/out/
 dist-bin/
 dedup.config.json
 sa.json
+.pre-cr.json
 
 # Keep the esbuild entry and its tests even when a global `build/` ignore exists.
 !build/
