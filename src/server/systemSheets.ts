@@ -168,7 +168,13 @@ export function encodeRow<T extends object>(fields: FieldSpec[], rec: T): CellVa
 
 function decodeField(kind: FieldKind, raw: CellValue): unknown {
   if (kind === "json") {
-    return typeof raw === "string" && raw !== "" ? JSON.parse(raw) : null;
+    if (typeof raw !== "string" || raw === "") return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Sheets sometimes coerces a JSON cell; a bad cell must not take down bootstrap.
+      return null;
+    }
   }
   if (kind === "num") return raw === "" || raw === null ? null : Number(raw);
   if (kind === "bool") return raw === true || raw === "TRUE" || raw === "true";
@@ -196,6 +202,8 @@ function isBlankRow(cells: CellValue[]): boolean {
 export class SheetTable {
   readonly columns: string[];
   private readonly lastCol: string;
+  /** Per-execution cache; invalidated on every write. */
+  private cachedGrid: CellValue[][] | null = null;
 
   constructor(
     private readonly gateway: SheetsGateway,
@@ -210,16 +218,37 @@ export class SheetTable {
     const info = this.gateway.getSheetByName(this.sheetName);
     if (!info) {
       this.gateway.insertSheet(this.sheetName, { hidden: true });
+      this.cachedGrid = null;
     } else if (!info.hidden) {
       this.gateway.hideSheet(this.sheetName);
     }
-    const header = this.readGrid()[0] ?? [];
+    // Only the header row is needed to decide whether to migrate columns —
+    // reading the full system sheet here used to dominate cold starts.
+    const header = this.gateway.readRange(this.sheetName, `A1:${this.lastCol}1`)[0] ?? [];
     const matches = this.columns.every((c, i) => header[i] === c);
-    if (!matches) this.gateway.writeRange(this.sheetName, "A1", [[...this.columns]]);
+    if (!matches) {
+      this.gateway.writeRange(this.sheetName, "A1", [[...this.columns]]);
+      this.cachedGrid = null;
+    }
   }
 
+  /**
+   * Bound to the used grid. `A1:F` (no end row) is treated by Apps Script as an
+   * open column range and can throw or time out on a fresh sheet; bootstrap's
+   * first `rpcBootstrap` was failing as INTERNAL after only `_Dedup_Config`
+   * appeared.
+   */
   private readGrid(): CellValue[][] {
-    return this.gateway.readRange(this.sheetName, `A1:${this.lastCol}`);
+    if (this.cachedGrid) return this.cachedGrid;
+    const size = this.gateway.getGridSize(this.sheetName);
+    const lastRow = Math.max(1, size.rowCount);
+    this.cachedGrid = this.gateway.readRange(this.sheetName, `A1:${this.lastCol}${lastRow}`);
+    return this.cachedGrid;
+  }
+
+  /** Drop the cached grid — required after out-of-band writes like `batchUpdate`. */
+  invalidate(): void {
+    this.cachedGrid = null;
   }
 
   private cellsFor(rec: Record<string, unknown>): CellValue[] {
@@ -236,14 +265,20 @@ export class SheetTable {
 
   append(rec: Record<string, unknown>): void {
     this.gateway.appendRows(this.sheetName, [this.cellsFor(rec)]);
+    this.invalidate();
   }
 
-  appendMany(recs: Record<string, unknown>[]): void {
+  appendMany(recs: Record<string, unknown>[], chunkSize = 100): void {
     if (recs.length === 0) return;
-    this.gateway.appendRows(
-      this.sheetName,
-      recs.map((r) => this.cellsFor(r)),
-    );
+    const size = Math.max(1, chunkSize);
+    for (let i = 0; i < recs.length; i += size) {
+      const slice = recs.slice(i, i + size);
+      this.gateway.appendRows(
+        this.sheetName,
+        slice.map((r) => this.cellsFor(r)),
+      );
+    }
+    this.invalidate();
   }
 
   rowsWithIndex(): Array<{ index: number; rec: TableRow }> {
@@ -263,13 +298,75 @@ export class SheetTable {
 
   writeAt(index: number, rec: Record<string, unknown>): void {
     this.gateway.writeRange(this.sheetName, `A${index + 1}`, [this.cellsFor(rec)]);
+    this.invalidate();
+  }
+
+  /**
+   * Overwrite a contiguous block of data rows starting at `startIndex`
+   * (0-based grid row; row 0 is the header). One `setValues` call.
+   */
+  writeRowsAt(startIndex: number, recs: Record<string, unknown>[]): void {
+    if (recs.length === 0) return;
+    this.gateway.writeRange(
+      this.sheetName,
+      `A${startIndex + 1}`,
+      recs.map((rec) => this.cellsFor(rec)),
+    );
+    this.invalidate();
+  }
+
+  /** Blank many data rows; contiguous runs become one `setValues` each. */
+  blankIndexes(indexes: ReadonlyArray<number>): void {
+    if (indexes.length === 0) return;
+    const sorted = [...new Set(indexes)].sort((a, b) => a - b);
+    let runStart = sorted[0]!;
+    let prev = sorted[0]!;
+    const flush = (from: number, to: number): void => {
+      const count = to - from + 1;
+      this.writeRowsAt(
+        from,
+        Array.from({ length: count }, () => ({})),
+      );
+    };
+    for (let i = 1; i < sorted.length; i++) {
+      const index = sorted[i]!;
+      if (index === prev + 1) {
+        prev = index;
+        continue;
+      }
+      flush(runStart, prev);
+      runStart = index;
+      prev = index;
+    }
+    flush(runStart, prev);
   }
 }
+
+/** One SheetTable per gateway+sheet for the life of an Apps Script execution. */
+const TABLE_CACHE = new WeakMap<object, Map<string, SheetTable>>();
 
 export function tableFor(gateway: SheetsGateway, sheetName: string): SheetTable {
   const fields = SYSTEM_SHEET_FIELDS[sheetName];
   if (!fields) throw new Error(`Unknown system sheet: ${sheetName}`);
-  return new SheetTable(gateway, sheetName, fields);
+  const key = gateway as object;
+  let byName = TABLE_CACHE.get(key);
+  if (!byName) {
+    byName = new Map();
+    TABLE_CACHE.set(key, byName);
+  }
+  let table = byName.get(sheetName);
+  if (!table) {
+    table = new SheetTable(gateway, sheetName, fields);
+    byName.set(sheetName, table);
+  }
+  return table;
+}
+
+/** Drop every cached system-sheet grid for this gateway. */
+export function invalidateTables(gateway: SheetsGateway): void {
+  const byName = TABLE_CACHE.get(gateway as object);
+  if (!byName) return;
+  for (const table of byName.values()) table.invalidate();
 }
 
 // --- Initialization ---------------------------------------------------------
@@ -279,11 +376,17 @@ export function nowIso(gateway: SheetsGateway): string {
   return new Date().toISOString();
 }
 
+/** Gateways already migrated in this execution — avoid re-reading seven sheets. */
+const ENSURED = new WeakSet<object>();
+
 /**
  * Create (or migrate) every hidden system sheet, seed config defaults on first
- * run, and record the current schema version. Idempotent.
+ * run, and record the current schema version. Idempotent within an execution.
  */
 export function ensureSystemSheets(gateway: SheetsGateway, cfg: DedupConfig): void {
+  const key = gateway as object;
+  if (ENSURED.has(key)) return;
+
   for (const sheetName of Object.values(SYSTEM_SHEETS)) {
     tableFor(gateway, sheetName).ensure();
   }
@@ -294,9 +397,9 @@ export function ensureSystemSheets(gateway: SheetsGateway, cfg: DedupConfig): vo
   // Seed config defaults only on first run (empty config sheet).
   const configTable = tableFor(gateway, SYSTEM_SHEETS.config);
   if (configTable.rows().length === 0) {
-    const rows = (Object.keys(cfg) as Array<keyof DedupConfig>).map((key) => ({
-      configKey: key,
-      valueJson: cfg[key],
+    const rows = (Object.keys(cfg) as Array<keyof DedupConfig>).map((keyName) => ({
+      configKey: keyName,
+      valueJson: cfg[keyName],
       description: "",
       schemaVersion: cfg.schemaVersion,
       updatedAt: ts,
@@ -306,17 +409,29 @@ export function ensureSystemSheets(gateway: SheetsGateway, cfg: DedupConfig): vo
   }
 
   // Record/migrate the schema version as a single SYSTEM state row.
+  // Skip the write when the version is already current — bootstrap hits this
+  // path on every sidebar open and a no-op write was burning ~1s of quota.
   const stateTable = tableFor(gateway, SYSTEM_SHEETS.state);
   const existing = stateTable
     .rowsWithIndex()
     .find((r) => r.rec.stateType === "SYSTEM" && r.rec.stateKey === "schema_version");
-  const stateRec = {
-    stateType: "SYSTEM",
-    stateKey: "schema_version",
-    valueJson: cfg.schemaVersion,
-    createdAt: existing ? existing.rec.createdAt : ts,
-    updatedAt: ts,
-  };
-  if (existing) stateTable.writeAt(existing.index, stateRec);
-  else stateTable.append(stateRec);
+  if (!existing) {
+    stateTable.append({
+      stateType: "SYSTEM",
+      stateKey: "schema_version",
+      valueJson: cfg.schemaVersion,
+      createdAt: ts,
+      updatedAt: ts,
+    });
+  } else if (existing.rec.valueJson !== cfg.schemaVersion) {
+    stateTable.writeAt(existing.index, {
+      stateType: "SYSTEM",
+      stateKey: "schema_version",
+      valueJson: cfg.schemaVersion,
+      createdAt: existing.rec.createdAt,
+      updatedAt: ts,
+    });
+  }
+
+  ENSURED.add(key);
 }

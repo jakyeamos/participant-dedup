@@ -4,7 +4,7 @@ import { SYSTEM_SHEETS } from "@/shared/constants";
 import { tableFor } from "@/server/systemSheets";
 
 export interface RecordsRepository {
-  append(records: RecordSnapshot[]): void;
+  append(records: RecordSnapshot[], chunkSize?: number): void;
   readByBatch(batchId: string, headers: string[]): RecordSnapshot[];
   /** Blank every snapshot row for a batch (§20.6 cancel discards working state). */
   deleteByBatch(batchId: string): void;
@@ -22,8 +22,8 @@ export function recordsRepository(gateway: SheetsGateway): RecordsRepository {
   const table = tableFor(gateway, SYSTEM_SHEETS.records);
 
   return {
-    append(records: RecordSnapshot[]): void {
-      table.appendMany(records as unknown as Record<string, unknown>[]);
+    append(records: RecordSnapshot[], chunkSize = 100): void {
+      table.appendMany(records as unknown as Record<string, unknown>[], chunkSize);
     },
 
     readByBatch(batchId: string, headers: string[]): RecordSnapshot[] {
@@ -50,9 +50,12 @@ export function recordsRepository(gateway: SheetsGateway): RecordsRepository {
     },
 
     deleteByBatch(batchId: string): void {
-      for (const { index, rec } of table.rowsWithIndex()) {
-        if (rec.batchId === batchId) table.writeAt(index, {});
-      }
+      table.blankIndexes(
+        table
+          .rowsWithIndex()
+          .filter((row) => row.rec.batchId === batchId)
+          .map((row) => row.index),
+      );
     },
   };
 }

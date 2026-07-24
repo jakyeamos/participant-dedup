@@ -28,15 +28,27 @@ export const DEFAULT_CONFIG = {
     houseNumberConflict: 4,
   },
   blocking: {
-    commonTokenBlockMax: 150,
-    trigramPostingMax: 200,
-    fuzzyOnlyCandidatesPerRecord: 100,
-    maxTotalCandidates: 200000,
+    commonTokenBlockMax: 100,
+    trigramPostingMax: 150,
+    fuzzyOnlyCandidatesPerRecord: 50,
+    /** Hard cap — over this, generation stops and `truncated` is set. */
+    maxTotalCandidates: 100000,
+    /** Soft warn threshold surfaced in scan metrics / UI. */
+    candidateWarnAt: 20000,
   },
   execution: {
-    sliceBudgetMs: 25000,
-    pairScoreChunkSize: 750,
-    recordWriteChunkSize: 500,
+    // Every scan unit must finish under Apps Script limits. Chunked writes and
+    // cursors are the durability model; in-memory scoring is the happy path.
+    sliceBudgetMs: 18000,
+    /** Soft product cap (design target < 5k). Over this → SHEET_TOO_LARGE. */
+    maxParticipantRows: 5000,
+    /** Max pairs scored without writing `_Dedup_Pairs` (one unit). */
+    inMemoryPairScoreMax: 2500,
+    /** Pending pairs scored per slice when the pairs sheet is used. */
+    pairScoreChunkSize: 250,
+    /** Rows per `setValues` when appending system-sheet tables. */
+    sheetWriteChunkSize: 50,
+    recordWriteChunkSize: 50,
     queuePageSize: 20,
     maxAtomicApplyRequests: 900,
   },

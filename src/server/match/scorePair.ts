@@ -145,12 +145,21 @@ export function scorePair(
     confidence = "LOW";
   } else {
     const strongContext = contextPtsRaw >= weights.context;
-    const highOk =
-      totalScore >= thresholds.high &&
+    // Exact/reversed name plus household support is enough for High structurally —
+    // placeholder/missing DOB must not block that band (flagged separately below).
+    const highSupport =
       nameSim >= thresholds.strongNameSimilarity &&
       (dobExact ||
         (zipExact && addressSim >= 0.55) ||
         (exactNameRelationship && (zipExact || addressStrong || strongContext)));
+    const dobNonEvidence = !dobExact && !dobConf;
+    const meetsHighScore =
+      totalScore >= thresholds.high ||
+      (dobNonEvidence &&
+        highSupport &&
+        totalScore >= thresholds.medium &&
+        totalScore + weights.dob >= thresholds.high);
+    const highOk = highSupport && meetsHighScore;
     const mediumOk =
       totalScore >= thresholds.medium &&
       (nameSim >= 0.7 || dobExact || nameRes.exactReversal || nameRes.likelyReversal);
@@ -228,6 +237,9 @@ export function scorePair(
   }
   if (na.dob.state === "INVALID" || nb.dob.state === "INVALID") {
     warnings.push("INVALID_DOB");
+  }
+  if (na.dob.state === "PLACEHOLDER" || nb.dob.state === "PLACEHOLDER") {
+    warnings.push("PLACEHOLDER_DOB");
   }
 
   const nameMethod: NameMatchMethod = nameRes.method;

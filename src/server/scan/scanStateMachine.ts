@@ -1,11 +1,18 @@
 import type { SheetsGateway } from "@/server/sheets/SheetsGateway";
 import type { BatchRecord } from "@/server/batchesRepository";
-import type { CellValue, PairScore, RecordSnapshot, SourceSchema } from "@/server/types";
+import type {
+  CellValue,
+  ClusterDecision,
+  PairScore,
+  RecordSnapshot,
+  SourceSchema,
+} from "@/server/types";
 import type { DedupConfig } from "@/shared/config";
+import { DEFAULT_CONFIG } from "@/shared/config";
 import type { BatchStatus } from "@/shared/constants";
 import type { PairRecord } from "@/server/pairsRepository";
 import { DedupError, type DedupErrorCode } from "@/server/errors";
-import { configHash, makeClusterId, makePairKey } from "@/server/hashing";
+import { configHash, decisionHash, makeClusterId, makePairKey } from "@/server/hashing";
 import { auditActor, type AuditActor } from "@/server/identity";
 import { ensureSystemSheets } from "@/server/systemSheets";
 import { batchesRepository } from "@/server/batchesRepository";
@@ -20,14 +27,41 @@ import { generateCandidates } from "@/server/match/candidateGenerator";
 import { scorePair } from "@/server/match/scorePair";
 import { formCluster } from "@/server/match/cluster";
 import { filterSuppressed } from "@/server/review/suppression";
+import { clusterFromRow } from "@/server/review/clusterRow";
+import {
+  carriedReadyClusters,
+  classifyRecordDelta,
+  dirtyIds as dirtyIdsFor,
+} from "@/server/scan/incremental";
 
 const SCAN_LOCK_TIMEOUT_MS = 30_000;
+
+interface ScanCursor {
+  priorBatchId?: string;
+  dirtyIds?: string[];
+  carryClusterIds?: string[];
+  /** How many snapshot rows are already appended for this batch (resumable write). */
+  snapshotOffset?: number;
+  /** How many candidate pairs are already spilled to `_Dedup_Pairs`. */
+  pairAppendOffset?: number;
+}
+
+const RESCANNABLE_STATUSES = new Set<string>(["READY", "PAUSED"]);
+
+const SCANNING_STATUSES = new Set<string>([
+  "SNAPSHOTTING",
+  "GENERATING_CANDIDATES",
+  "SCORING",
+  "CLUSTERING",
+]);
 
 export interface ScanMetrics {
   records: number;
   candidates: number;
   qualifiedEdges: number;
   clusters: number;
+  /** Source data rows at scan start (header excluded) — progress denominator. */
+  sourceRows: number;
 }
 
 export interface ScanState {
@@ -35,6 +69,8 @@ export interface ScanState {
   status: BatchStatus;
   phase: string;
   metrics: ScanMetrics;
+  /** Soft signals for the sidebar (truncation / high candidate volume). */
+  warnings: string[];
   errorCode?: DedupErrorCode;
 }
 
@@ -45,16 +81,26 @@ function num(value: CellValue | undefined): number {
 
 /** The scan state a batch row represents — what §21.2 shows for an active scan. */
 export function stateFromBatch(batch: BatchRecord): ScanState {
+  const candidates = num(batch.candidateCount);
+  const truncated = num(batch.candidateTruncationCount) > 0;
+  const warnings: string[] = [];
+  if (truncated) warnings.push("CANDIDATE_TRUNCATION");
+  else if (candidates >= DEFAULT_CONFIG.blocking.candidateWarnAt) {
+    warnings.push("HIGH_CANDIDATE_VOLUME");
+  }
+
   const state: ScanState = {
     batchId: String(batch.batchId),
     status: String(batch.status) as BatchStatus,
     phase: String(batch.phase ?? batch.status),
     metrics: {
       records: num(batch.recordCount),
-      candidates: num(batch.candidateCount),
+      candidates,
       qualifiedEdges: num(batch.qualifiedEdgeCount),
       clusters: num(batch.clusterCount),
+      sourceRows: Math.max(0, num(batch.sourceLastRow) - num(batch.headerRow)),
     },
+    warnings,
   };
   const code = batch.errorCode;
   if (code !== null && code !== undefined && String(code) !== "") {
@@ -67,11 +113,64 @@ function schemaOf(batch: BatchRecord): SourceSchema {
   return batch.schema as unknown as SourceSchema;
 }
 
+function cursorOf(batch: BatchRecord): ScanCursor {
+  const raw = batch.phaseCursor;
+  if (typeof raw !== "string" || raw.trim() === "") return {};
+  try {
+    const parsed = JSON.parse(raw) as ScanCursor;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function cursorJson(cursor: ScanCursor): string {
+  return JSON.stringify(cursor);
+}
+
+function memberKey(memberIds: ReadonlyArray<string>): string {
+  return [...memberIds].sort().join("\u0000");
+}
+
+function idsFromCursor(cursor: ScanCursor): Set<string> | null {
+  return Array.isArray(cursor.dirtyIds) ? new Set(cursor.dirtyIds.map(String)) : null;
+}
+
+function decisionForCarry(
+  value: unknown,
+  batchId: string,
+  clusterId: string,
+  revision: number,
+): ClusterDecision | null {
+  if (!value || typeof value !== "object") return null;
+  const prior = value as ClusterDecision;
+  return {
+    batchId,
+    clusterId,
+    expectedRevision: revision,
+    mode: prior.mode,
+    retainedIds: Array.isArray(prior.retainedIds) ? prior.retainedIds.map(String) : [],
+    deleteAssignments:
+      prior.deleteAssignments && typeof prior.deleteAssignments === "object"
+        ? Object.fromEntries(
+            Object.entries(prior.deleteAssignments).map(([deletedId, retainedId]) => [
+              deletedId,
+              String(retainedId),
+            ]),
+          )
+        : {},
+    fieldChoices:
+      prior.fieldChoices && typeof prior.fieldChoices === "object" ? prior.fieldChoices : {},
+    notes: typeof prior.notes === "string" ? prior.notes : "",
+  };
+}
+
 /**
  * §12 Starts a scan. Assigns any missing `_Dedup_ID` values, records the resolved
- * schema on the batch row, and parks the batch in `SNAPSHOTTING` — no participant
- * values are read or written beyond the id column. Re-entrant: an already-active
- * batch is returned untouched.
+ * schema on the batch row, then drains as much of the scan as fits in
+ * `execution.sliceBudgetMs` — small sheets typically finish in this one Apps
+ * Script call. Mid-scan active batches are returned untouched; READY/PAUSED
+ * batches are superseded first.
  */
 export function startScan(
   gateway: SheetsGateway,
@@ -88,7 +187,16 @@ export function startScan(
     const batches = batchesRepository(gateway);
 
     const active = batches.getActive();
-    if (active) return stateFromBatch(active);
+    let priorBatchId = "";
+    if (active) {
+      if (!RESCANNABLE_STATUSES.has(String(active.status))) return stateFromBatch(active);
+      priorBatchId = String(active.batchId);
+      batches.update(priorBatchId, {
+        status: "SUPERSEDED",
+        phase: "SUPERSEDED",
+        revision: num(active.revision) + 1,
+      });
+    }
 
     // ensureDedupIds may create the id column, so the schema is resolved twice:
     // the second pass is what carries a populated dedupIdColumnIndex.
@@ -116,6 +224,7 @@ export function startScan(
       clusterCount: 0,
       candidateTruncationCount: 0,
       createdBy: actor.actorId,
+      phaseCursor: priorBatchId === "" ? "" : cursorJson({ priorBatchId }),
       revision: 1,
     });
     auditRepository(gateway).append({
@@ -126,19 +235,20 @@ export function startScan(
       sourceSheetName: schema.sheetName,
     });
 
-    const inserted = batches.get(batchId);
-    if (!inserted) throw new DedupError("INTERNAL");
-    return stateFromBatch(inserted);
+    if (!batches.get(batchId)) throw new DedupError("INTERNAL");
+    return drainScan(gateway, cfg, actor, Math.max(0, cfg.execution.sliceBudgetMs));
   } finally {
     lock.release();
   }
 }
 
 /**
- * §12 Advances the active scan by exactly one slice and returns the new state.
- * Every phase persists its result before returning, so an interrupted execution
- * resumes from the sheets alone — pending pairs are the durable scoring cursor.
- * Calling this on a `READY` batch is a no-op.
+ * §12 Advances the active scan by one time-bounded slice and returns the new
+ * state. A slice is bounded by `execution.sliceBudgetMs`: on a small sheet that
+ * usually means snapshot → candidates → score → cluster in one Apps Script
+ * round-trip. Every unit of work still persists before the next, so an
+ * interrupted execution resumes from the sheets alone. Calling this on a
+ * `READY` batch is a no-op.
  */
 export function advanceScan(
   gateway: SheetsGateway,
@@ -150,25 +260,80 @@ export function advanceScan(
   const lock = gateway.getDocumentLock();
   lock.acquire(SCAN_LOCK_TIMEOUT_MS);
   try {
-    const batches = batchesRepository(gateway);
+    return drainScan(gateway, cfg, actor, Math.max(0, cfg.execution.sliceBudgetMs));
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Runs scan units until the batch leaves a scanning status or the budget is
+ * spent. Caller must already hold the document lock.
+ *
+ * `records` is kept in memory for the rest of this execution so candidate /
+ * score / cluster phases do not re-read the records sheet.
+ */
+function drainScan(
+  gateway: SheetsGateway,
+  cfg: DedupConfig,
+  actor: AuditActor,
+  budgetMs: number,
+): ScanState {
+  const batches = batchesRepository(gateway);
+  const deadline = Date.now() + budgetMs;
+  const ctx: DrainContext = { records: null };
+  let state: ScanState | null = null;
+
+  while (true) {
+    if (budgetMs > 0 && Date.now() >= deadline) {
+      const active = batches.getActive();
+      if (!active) throw new DedupError("BATCH_STATE_CONFLICT");
+      return stateFromBatch(active);
+    }
+
     const active = batches.getActive();
     if (!active) throw new DedupError("BATCH_STATE_CONFLICT");
 
     switch (String(active.status)) {
       case "SNAPSHOTTING":
-        return snapshotPhase(gateway, cfg, active, actor);
+        state = snapshotPhase(gateway, cfg, active, actor, ctx);
+        break;
       case "GENERATING_CANDIDATES":
-        return candidatePhase(gateway, cfg, active);
+        state = candidatePhase(gateway, cfg, active, actor, ctx);
+        break;
       case "SCORING":
-        return scoringPhase(gateway, cfg, active);
+        state = scoringPhase(gateway, cfg, active, ctx);
+        break;
       case "CLUSTERING":
-        return clusteringPhase(gateway, cfg, active, actor);
+        state = clusteringPhase(gateway, cfg, active, actor, ctx);
+        break;
       default:
         return stateFromBatch(active);
     }
-  } finally {
-    lock.release();
+
+    // budgetMs === 0 forces one unit per call (used by resume tests).
+    if (!SCANNING_STATUSES.has(state.status) || budgetMs === 0 || Date.now() >= deadline) {
+      return state;
+    }
   }
+}
+
+interface DrainContext {
+  records: RecordSnapshot[] | null;
+}
+
+function recordsFor(
+  gateway: SheetsGateway,
+  batch: BatchRecord,
+  ctx: DrainContext,
+): RecordSnapshot[] {
+  if (ctx.records) return ctx.records;
+  const records = recordsRepository(gateway).readByBatch(
+    String(batch.batchId),
+    schemaOf(batch).headers,
+  );
+  ctx.records = records;
+  return records;
 }
 
 /**
@@ -234,22 +399,29 @@ function snapshotPhase(
   cfg: DedupConfig,
   batch: BatchRecord,
   actor: AuditActor,
+  ctx: DrainContext,
 ): ScanState {
   const batches = batchesRepository(gateway);
+  const recordsRepo = recordsRepository(gateway);
   const batchId = String(batch.batchId);
   const schema = schemaOf(batch);
   const revision = num(batch.revision);
+  const cursor = cursorOf(batch);
+  const chunkSize = Math.max(1, cfg.execution.sheetWriteChunkSize);
 
-  const records = buildSnapshots(gateway, batchId, schema, cfg, gateway.getTimeZone());
+  const hadCachedRecords = ctx.records !== null;
+  const records =
+    ctx.records ?? buildSnapshots(gateway, batchId, schema, cfg, gateway.getTimeZone());
+  ctx.records = records;
 
-  const duplicates = detectDuplicateIds(records);
-  if (duplicates.length > 0) {
-    const error = new DedupError("DUPLICATE_DEDUP_ID");
+  if (records.length > cfg.execution.maxParticipantRows) {
+    const error = new DedupError("SHEET_TOO_LARGE");
     batches.update(batchId, {
       status: "FAILED",
       phase: "FAILED",
       errorCode: error.code,
       errorMessage: error.safeMessage,
+      recordCount: records.length,
       revision: revision + 1,
     });
     auditRepository(gateway).append({
@@ -265,10 +437,94 @@ function snapshotPhase(
     return reread(gateway, batchId);
   }
 
-  recordsRepository(gateway).append(records);
+  let offset = cursor.snapshotOffset ?? 0;
+  if (offset === 0) {
+    recordsRepo.deleteByBatch(batchId);
+  } else if (!hadCachedRecords) {
+    // Cross-execution resume: a crash between append and cursor update can leave
+    // a torn write. Restart snapshot rows when counts disagree.
+    const existingCount = recordsRepo.readByBatch(batchId, schema.headers).length;
+    if (existingCount !== offset) {
+      recordsRepo.deleteByBatch(batchId);
+      offset = 0;
+    }
+  }
+
+  if (offset === 0) {
+    const duplicates = detectDuplicateIds(records);
+    if (duplicates.length > 0) {
+      const error = new DedupError("DUPLICATE_DEDUP_ID");
+      batches.update(batchId, {
+        status: "FAILED",
+        phase: "FAILED",
+        errorCode: error.code,
+        errorMessage: error.safeMessage,
+        revision: revision + 1,
+      });
+      auditRepository(gateway).append({
+        ...actor,
+        eventType: "SCAN_FAILED",
+        batchId,
+        sourceSheetId: schema.sheetId,
+        sourceSheetName: schema.sheetName,
+        result: "FAILED",
+        errorCode: error.code,
+        errorMessage: error.safeMessage,
+      });
+      return reread(gateway, batchId);
+    }
+  }
+
+  let baseCursor: ScanCursor =
+    offset === 0
+      ? {}
+      : {
+          ...(cursor.priorBatchId ? { priorBatchId: cursor.priorBatchId } : {}),
+          ...(cursor.dirtyIds ? { dirtyIds: cursor.dirtyIds } : {}),
+          ...(cursor.carryClusterIds ? { carryClusterIds: cursor.carryClusterIds } : {}),
+        };
+
+  if (offset === 0 && cursor.priorBatchId) {
+    const prior = batches.get(cursor.priorBatchId);
+    if (
+      prior &&
+      String(prior.schemaHash) === String(batch.schemaHash) &&
+      String(prior.configHash) === String(batch.configHash)
+    ) {
+      const priorSchema = schemaOf(prior);
+      const priorRecords = recordsRepo.readByBatch(cursor.priorBatchId, priorSchema.headers);
+      const priorClusters = clustersRepository(gateway).listByBatch(cursor.priorBatchId);
+      const delta = classifyRecordDelta(priorRecords, records);
+      const carry = carriedReadyClusters(priorClusters, delta.unchangedIds);
+      baseCursor = {
+        priorBatchId: cursor.priorBatchId,
+        dirtyIds: dirtyIdsFor(delta, priorClusters),
+        carryClusterIds: carry.map((row) => String(row.clusterId)).sort(),
+      };
+    }
+  }
+
+  const slice = records.slice(offset, offset + chunkSize);
+  if (slice.length > 0) {
+    recordsRepo.append(slice, chunkSize);
+  }
+  const nextOffset = offset + slice.length;
+
+  if (nextOffset < records.length) {
+    batches.update(batchId, {
+      status: "SNAPSHOTTING",
+      phase: "SNAPSHOTTING",
+      phaseCursor: cursorJson({ ...baseCursor, snapshotOffset: nextOffset }),
+      recordCount: nextOffset,
+      revision: revision + 1,
+    });
+    return reread(gateway, batchId);
+  }
+
   batches.update(batchId, {
     status: "GENERATING_CANDIDATES",
     phase: "GENERATING_CANDIDATES",
+    phaseCursor: Object.keys(baseCursor).length === 0 ? "" : cursorJson(baseCursor),
     recordCount: records.length,
     revision: revision + 1,
   });
@@ -279,47 +535,153 @@ function candidatePhase(
   gateway: SheetsGateway,
   cfg: DedupConfig,
   batch: BatchRecord,
+  actor: AuditActor,
+  ctx: DrainContext,
 ): ScanState {
   const batches = batchesRepository(gateway);
+  const pairs = pairsRepository(gateway);
   const batchId = String(batch.batchId);
-  const schema = schemaOf(batch);
   const revision = num(batch.revision);
 
-  const records = recordsRepository(gateway).readByBatch(batchId, schema.headers);
-  const { pairs, truncated } = generateCandidates(records, cfg);
+  const records = recordsFor(gateway, batch, ctx);
+  const cursor = cursorOf(batch);
+  const dirtyIds = idsFromCursor(cursor);
+  const generated = generateCandidates(records, cfg);
+  const candidatePairs =
+    dirtyIds === null
+      ? generated.pairs
+      : generated.pairs.filter((p) => dirtyIds.has(p.leftId) || dirtyIds.has(p.rightId));
 
-  const rows: PairRecord[] = pairs.map((p) => ({
-    batchId,
-    pairKey: makePairKey(p.leftId, p.rightId),
-    leftId: p.leftId,
-    rightId: p.rightId,
-    generationReasons: [],
-    preScore: 0,
-    scoreStatus: "PENDING",
-    score: null,
-    qualified: false,
-  }));
-  pairsRepository(gateway).append(rows);
+  const baseCursor: ScanCursor = {
+    ...(cursor.priorBatchId ? { priorBatchId: cursor.priorBatchId } : {}),
+    ...(cursor.dirtyIds ? { dirtyIds: cursor.dirtyIds } : {}),
+    ...(cursor.carryClusterIds ? { carryClusterIds: cursor.carryClusterIds } : {}),
+  };
+
+  // Prefer scoring in memory: the pairs sheet is only for cross-execution resume.
+  if (
+    (cursor.pairAppendOffset ?? 0) === 0 &&
+    candidatePairs.length <= cfg.execution.inMemoryPairScoreMax
+  ) {
+    const byId = new Map(records.map((rec) => [rec.dedupId, rec]));
+    const scores = candidatePairs
+      .map((p) =>
+        scorePairRecord(
+          {
+            batchId,
+            pairKey: makePairKey(p.leftId, p.rightId),
+            leftId: p.leftId,
+            rightId: p.rightId,
+            generationReasons: [],
+            preScore: 0,
+            scoreStatus: "PENDING",
+            score: null,
+            qualified: false,
+          },
+          byId,
+          cfg,
+        ),
+      )
+      .map((p) => p.score)
+      .filter((s): s is PairScore => s !== null);
+    batches.update(batchId, {
+      candidateCount: candidatePairs.length,
+      candidateTruncationCount: generated.truncated ? 1 : 0,
+      revision: revision + 1,
+    });
+    const refreshed = batches.get(batchId);
+    if (!refreshed) throw new DedupError("INTERNAL");
+    return finalizeClusters(gateway, cfg, refreshed, actor, scores, ctx, { clearPairs: false });
+  }
+
+  const writeChunk = Math.max(1, cfg.execution.sheetWriteChunkSize);
+  let offset = cursor.pairAppendOffset ?? 0;
+  if (offset === 0) {
+    pairs.deleteByBatch(batchId);
+  } else {
+    // Cross-execution resume: restart spill if counts disagree.
+    const existing = pairs.readByBatch(batchId).length;
+    if (existing !== offset) {
+      pairs.deleteByBatch(batchId);
+      offset = 0;
+    }
+  }
+
+  const slice = candidatePairs.slice(offset, offset + writeChunk);
+  if (slice.length > 0) {
+    pairs.append(
+      slice.map((p) => ({
+        batchId,
+        pairKey: makePairKey(p.leftId, p.rightId),
+        leftId: p.leftId,
+        rightId: p.rightId,
+        generationReasons: [],
+        preScore: 0,
+        scoreStatus: "PENDING" as const,
+        score: null,
+        qualified: false,
+      })),
+      writeChunk,
+    );
+  }
+  const nextOffset = offset + slice.length;
+
+  if (nextOffset < candidatePairs.length) {
+    batches.update(batchId, {
+      status: "GENERATING_CANDIDATES",
+      phase: "GENERATING_CANDIDATES",
+      phaseCursor: cursorJson({ ...baseCursor, pairAppendOffset: nextOffset }),
+      candidateCount: candidatePairs.length,
+      candidateTruncationCount: generated.truncated ? 1 : 0,
+      revision: revision + 1,
+    });
+    return reread(gateway, batchId);
+  }
 
   batches.update(batchId, {
     status: "SCORING",
     phase: "SCORING",
-    candidateCount: rows.length,
-    candidateTruncationCount: truncated ? 1 : 0,
+    phaseCursor: Object.keys(baseCursor).length === 0 ? "" : cursorJson(baseCursor),
+    candidateCount: candidatePairs.length,
+    candidateTruncationCount: generated.truncated ? 1 : 0,
     revision: revision + 1,
   });
   return reread(gateway, batchId);
+}
+
+function scorePairRecord(
+  rec: PairRecord,
+  byId: Map<string, RecordSnapshot>,
+  cfg: DedupConfig,
+): PairRecord {
+  try {
+    const left = byId.get(rec.leftId);
+    const right = byId.get(rec.rightId);
+    if (!left || !right) {
+      return { ...rec, scoreStatus: "ERROR", score: null, qualified: false };
+    }
+    const score = scorePair(left, right, cfg);
+    return {
+      ...rec,
+      scoreStatus: "SCORED",
+      score,
+      qualified: score.eligible && score.confidence !== "EXCLUDED",
+    };
+  } catch {
+    // A single unscoreable pair must not abandon the batch (§12.4).
+    return { ...rec, scoreStatus: "ERROR", score: null, qualified: false };
+  }
 }
 
 function scoringPhase(
   gateway: SheetsGateway,
   cfg: DedupConfig,
   batch: BatchRecord,
+  ctx: DrainContext,
 ): ScanState {
   const batches = batchesRepository(gateway);
   const pairs = pairsRepository(gateway);
   const batchId = String(batch.batchId);
-  const schema = schemaOf(batch);
   const revision = num(batch.revision);
 
   const pending = pairs.readPendingWithIndex(batchId, cfg.execution.pairScoreChunkSize);
@@ -332,42 +694,63 @@ function scoringPhase(
     return reread(gateway, batchId);
   }
 
-  const byId = new Map<string, RecordSnapshot>();
-  for (const rec of recordsRepository(gateway).readByBatch(batchId, schema.headers)) {
-    byId.set(rec.dedupId, rec);
-  }
+  const byId = new Map(
+    recordsFor(gateway, batch, ctx).map((rec) => [rec.dedupId, rec] as const),
+  );
 
-  for (const { index, rec } of pending) {
-    let updated: PairRecord;
-    try {
-      const left = byId.get(rec.leftId);
-      const right = byId.get(rec.rightId);
-      if (!left || !right) {
-        updated = { ...rec, scoreStatus: "ERROR", score: null, qualified: false };
-      } else {
-        const score = scorePair(left, right, cfg);
-        updated = {
-          ...rec,
-          scoreStatus: "SCORED",
-          score,
-          qualified: score.eligible && score.confidence !== "EXCLUDED",
-        };
-      }
-    } catch {
-      // A single unscoreable pair must not abandon the batch (§12.4).
-      updated = { ...rec, scoreStatus: "ERROR", score: null, qualified: false };
-    }
-    pairs.writeAt(index, updated);
-  }
+  const updates = pending.map(({ index, rec }) => ({
+    index,
+    rec: scorePairRecord(rec, byId, cfg),
+  }));
+  pairs.writeMany(updates);
 
-  const remaining = pairs.readPendingWithIndex(batchId, 1).length;
+  // A full chunk usually means more pending work; avoid a second full-sheet read
+  // just to ask that question (that re-read dominated large-sheet scoring).
+  const morePending = pending.length >= cfg.execution.pairScoreChunkSize;
   batches.update(
     batchId,
-    remaining === 0
-      ? { status: "CLUSTERING", phase: "CLUSTERING", revision: revision + 1 }
-      : { phase: "SCORING", revision: revision + 1 },
+    morePending
+      ? { phase: "SCORING", revision: revision + 1 }
+      : { status: "CLUSTERING", phase: "CLUSTERING", revision: revision + 1 },
   );
   return reread(gateway, batchId);
+}
+
+function carryReadyClusterRows(
+  gateway: SheetsGateway,
+  batchId: string,
+  cursor: ScanCursor,
+  generatedMemberKeys: Set<string>,
+): Record<string, unknown>[] {
+  if (!cursor.priorBatchId || !Array.isArray(cursor.carryClusterIds)) return [];
+
+  const carryIds = new Set(cursor.carryClusterIds.map(String));
+  const out: Record<string, unknown>[] = [];
+  for (const row of clustersRepository(gateway).listByBatch(cursor.priorBatchId)) {
+    if (!carryIds.has(String(row.clusterId))) continue;
+    const cluster = clusterFromRow(row);
+    if (generatedMemberKeys.has(memberKey(cluster.memberIds))) continue;
+
+    const revision = Number(row.revision ?? 1) || 1;
+    const clusterId = makeClusterId(batchId, cluster.memberIds);
+    const decision = decisionForCarry(row.decision, batchId, clusterId, revision);
+    if (!decision) continue;
+
+    out.push({
+      ...row,
+      batchId,
+      clusterId,
+      edgeKeys: [],
+      status: "READY_TO_APPLY",
+      revision,
+      decision,
+      decisionHash: decisionHash(decision),
+      staleReason: "",
+      applyBatchId: "",
+      appliedAt: "",
+    });
+  }
+  return out;
 }
 
 function clusteringPhase(
@@ -375,21 +758,32 @@ function clusteringPhase(
   cfg: DedupConfig,
   batch: BatchRecord,
   actor: AuditActor,
+  ctx: DrainContext,
+): ScanState {
+  const scores = pairsRepository(gateway)
+    .readByBatch(String(batch.batchId))
+    .filter((p) => p.scoreStatus === "SCORED")
+    .map((p) => p.score)
+    .filter((s): s is PairScore => s !== null);
+  return finalizeClusters(gateway, cfg, batch, actor, scores, ctx, { clearPairs: true });
+}
+
+function finalizeClusters(
+  gateway: SheetsGateway,
+  cfg: DedupConfig,
+  batch: BatchRecord,
+  actor: AuditActor,
+  scores: PairScore[],
+  ctx: DrainContext,
+  options: { clearPairs: boolean },
 ): ScanState {
   const batches = batchesRepository(gateway);
-  const pairs = pairsRepository(gateway);
   const batchId = String(batch.batchId);
   const schema = schemaOf(batch);
   const revision = num(batch.revision);
 
-  const scores = pairs
-    .readByBatch(batchId)
-    .filter((p) => p.scoreStatus === "SCORED")
-    .map((p) => p.score)
-    .filter((s): s is PairScore => s !== null);
-
   const relevantHashes = new Map<string, string>();
-  for (const rec of recordsRepository(gateway).readByBatch(batchId, schema.headers)) {
+  for (const rec of recordsFor(gateway, batch, ctx)) {
     relevantHashes.set(rec.dedupId, rec.relevantHash);
   }
 
@@ -401,21 +795,25 @@ function clusteringPhase(
     (id) => relevantHashes.get(id) ?? "",
     String(batch.configHash),
   );
+  const generatedMemberKeys = new Set(clusters.map((c) => memberKey(c.memberIds)));
+  const generatedRows = clusters.map((c) => ({
+    batchId,
+    clusterId: makeClusterId(batchId, c.memberIds),
+    clusterType: c.clusterType,
+    memberIds: c.memberIds,
+    coreMemberIds: c.memberIds,
+    suggestedMemberIds: c.suggestedMemberIds,
+    edgeKeys: c.edges.map((e) => e.pairKey),
+    highestConfidence: c.topConfidence,
+    maxScore: c.topScore,
+    warnings: c.chainWarning ? ["POSSIBLE_CHAIN_CLUSTER"] : [],
+    status: "UNREVIEWED",
+    revision: 1,
+  }));
+  const carriedRows = carryReadyClusterRows(gateway, batchId, cursorOf(batch), generatedMemberKeys);
   clustersRepository(gateway).append(
-    clusters.map((c) => ({
-      batchId,
-      clusterId: makeClusterId(batchId, c.memberIds),
-      clusterType: c.clusterType,
-      memberIds: c.memberIds,
-      coreMemberIds: c.memberIds,
-      suggestedMemberIds: c.suggestedMemberIds,
-      edgeKeys: c.edges.map((e) => e.pairKey),
-      highestConfidence: c.topConfidence,
-      maxScore: c.topScore,
-      warnings: c.chainWarning ? ["POSSIBLE_CHAIN_CLUSTER"] : [],
-      status: "UNREVIEWED",
-      revision: 1,
-    })),
+    [...generatedRows, ...carriedRows],
+    cfg.execution.sheetWriteChunkSize,
   );
 
   const qualifiedEdges = scores.filter(
@@ -423,12 +821,12 @@ function clusteringPhase(
   ).length;
 
   // Pair rows are working state; clusters carry everything review needs.
-  pairs.deleteByBatch(batchId);
+  if (options.clearPairs) pairsRepository(gateway).deleteByBatch(batchId);
 
   batches.update(batchId, {
     status: "READY",
     phase: "READY",
-    clusterCount: clusters.length,
+    clusterCount: generatedRows.length + carriedRows.length,
     qualifiedEdgeCount: qualifiedEdges,
     revision: revision + 1,
   });

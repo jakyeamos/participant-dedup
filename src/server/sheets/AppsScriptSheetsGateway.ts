@@ -143,7 +143,19 @@ export class AppsScriptSheetsGateway implements SheetsGateway {
 
   writeRange(sheetName: string, a1: string, values: GridValues): void {
     if (values.length === 0) return;
-    this.sheet(sheetName).getRange(a1).setValues(values);
+    const sheet = this.sheet(sheetName);
+    const width = Math.max(...values.map((r) => r.length));
+    const padded = values.map((r) => {
+      const row: CellValue[] = r.slice(0, width);
+      while (row.length < width) row.push(null);
+      return row;
+    });
+    // `getRange("A1")` is 1×1; setValues requires the range to match the matrix.
+    // Anchor at the A1 start cell, then size to the padded grid (same as appendRows).
+    const anchor = sheet.getRange(a1);
+    sheet
+      .getRange(anchor.getRow(), anchor.getColumn(), padded.length, width)
+      .setValues(padded);
   }
 
   appendRows(sheetName: string, rows: GridValues): void {

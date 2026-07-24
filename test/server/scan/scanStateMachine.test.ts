@@ -8,7 +8,9 @@ import { auditRepository } from "@/server/auditRepository";
 import { advanceScan, cancelScan, startScan } from "@/server/scan/scanStateMachine";
 import { batchesRepository } from "@/server/batchesRepository";
 import { cloneDefaultConfig, type DedupConfig } from "@/shared/config";
+import { decisionHash } from "@/server/hashing";
 import { isDedupError } from "@/server/errors";
+import type { ClusterDecision, SourceSchema } from "@/server/types";
 import { HEADERS, generateFixture } from "../../../tools/generateFixture";
 
 const PEOPLE = "Participants";
@@ -77,6 +79,60 @@ function pendingCount(g: FakeSheetsGateway, batchId: string): number {
     .filter((p) => p.scoreStatus === "PENDING").length;
 }
 
+function schemaFor(g: FakeSheetsGateway, batchId: string): SourceSchema {
+  return batchesRepository(g).get(batchId)?.schema as unknown as SourceSchema;
+}
+
+function idBySourceRow(g: FakeSheetsGateway, batchId: string): Map<number, string> {
+  const schema = schemaFor(g, batchId);
+  return new Map(
+    recordsRepository(g)
+      .readByBatch(batchId, schema.headers)
+      .map((r) => [r.sourceRowAtScan, r.dedupId]),
+  );
+}
+
+function clusterForRows(g: FakeSheetsGateway, batchId: string, rows: number[]): string {
+  const ids = rows.map((row) => idBySourceRow(g, batchId).get(row));
+  const found = clustersRepository(g)
+    .listByBatch(batchId)
+    .find((cluster) => ids.every((id) => (cluster.memberIds as unknown as string[]).includes(id!)));
+  if (!found) throw new Error(`No cluster for rows ${rows.join(",")}`);
+  return String(found.clusterId);
+}
+
+function markKeepAll(g: FakeSheetsGateway, clusterId: string): void {
+  clustersRepository(g).update(clusterId, { status: "KEEP_ALL", revision: 2 });
+}
+
+function markUnresolved(g: FakeSheetsGateway, clusterId: string): void {
+  clustersRepository(g).update(clusterId, { status: "UNRESOLVED", revision: 2 });
+}
+
+function markReadyToApply(g: FakeSheetsGateway, batchId: string, clusterId: string): ClusterDecision {
+  const row = clustersRepository(g).get(clusterId)!;
+  const ids = row.memberIds as unknown as string[];
+  const revision = 2;
+  const decision: ClusterDecision = {
+    batchId,
+    clusterId,
+    expectedRevision: revision,
+    mode: "SELECT_RECORDS",
+    retainedIds: [ids[0]!],
+    deleteAssignments: { [ids[1]!]: ids[0]! },
+    fieldChoices: {},
+    notes: "carry me",
+  };
+  clustersRepository(g).update(clusterId, {
+    status: "READY_TO_APPLY",
+    revision,
+    decision,
+    decisionHash: decisionHash(decision),
+    notes: decision.notes,
+  });
+  return decision;
+}
+
 describe("scan state machine", () => {
   it("advances a 20-row batch through every phase to READY with the expected clusters", () => {
     const cfg = cloneDefaultConfig();
@@ -85,7 +141,7 @@ describe("scan state machine", () => {
     loadGrid(g, PEOPLE, HEADER, twentyRows());
 
     const start = startScan(g, PEOPLE, cfg);
-    expect(start.status).toBe("SNAPSHOTTING");
+    expect(start.status).toBe("READY");
 
     const final = runToEnd(g, cfg);
     expect(final.status).toBe("READY");
@@ -120,7 +176,7 @@ describe("scan state machine", () => {
     });
 
     const start = startScan(g, PEOPLE, cfg);
-    const final = runToEnd(g, cfg);
+    const final = start.status === "FAILED" ? start : runToEnd(g, cfg);
 
     expect(final.status).toBe("FAILED");
     expect(final.errorCode).toBe("DUPLICATE_DEDUP_ID");
@@ -134,15 +190,17 @@ describe("scan state machine", () => {
 
   it("resumes scoring across slices without rescoring completed pairs", () => {
     const cfg = cloneDefaultConfig();
-    cfg.execution.pairScoreChunkSize = 1; // one pair per scoring slice
+    cfg.execution.inMemoryPairScoreMax = 0; // force durable pairs-sheet scoring path
+    cfg.execution.pairScoreChunkSize = 1; // one pair per scoring unit
+    cfg.execution.sheetWriteChunkSize = 1_000; // spill all pairs in one unit
+    cfg.execution.sliceBudgetMs = 0; // one unit per advance — proves resume works
     const g = newGateway();
     ensureSystemSheets(g, cfg);
     loadGrid(g, PEOPLE, HEADER, twentyRows());
 
     const start = startScan(g, PEOPLE, cfg);
-    let state = advanceScan(g, cfg); // SNAPSHOTTING -> GENERATING_CANDIDATES
-    expect(state.status).toBe("GENERATING_CANDIDATES");
-    state = advanceScan(g, cfg); // GENERATING_CANDIDATES -> SCORING
+    expect(start.status).toBe("GENERATING_CANDIDATES");
+    let state = advanceScan(g, cfg); // GENERATING_CANDIDATES -> SCORING
     expect(state.status).toBe("SCORING");
 
     const totalPairs = pairsRepository(g).readByBatch(start.batchId).length;
@@ -163,9 +221,81 @@ describe("scan state machine", () => {
     expect(state.metrics.clusters).toBe(2);
   });
 
+  it("writes snapshot rows across resumable chunks", () => {
+    const cfg = cloneDefaultConfig();
+    cfg.execution.sheetWriteChunkSize = 5;
+    cfg.execution.sliceBudgetMs = 0;
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    let state = startScan(g, PEOPLE, cfg);
+    expect(state.status).toBe("SNAPSHOTTING");
+    expect(state.metrics.records).toBe(5);
+
+    let guard = 0;
+    while (state.status === "SNAPSHOTTING" && guard++ < 20) {
+      state = advanceScan(g, cfg);
+    }
+    expect(state.status).toBe("GENERATING_CANDIDATES");
+    expect(state.metrics.records).toBe(20);
+    expect(recordsRepository(g).readByBatch(state.batchId, HEADER).length).toBe(20);
+  });
+
+  it("spills candidate pairs across resumable chunks when over the in-memory cap", () => {
+    const cfg = cloneDefaultConfig();
+    cfg.execution.inMemoryPairScoreMax = 0;
+    cfg.execution.sheetWriteChunkSize = 1;
+    cfg.execution.sliceBudgetMs = 0;
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    let state = startScan(g, PEOPLE, cfg);
+    while (state.status === "SNAPSHOTTING") state = advanceScan(g, cfg);
+    expect(state.status).toBe("GENERATING_CANDIDATES");
+
+    state = advanceScan(g, cfg);
+    expect(state.status).toBe("GENERATING_CANDIDATES");
+    expect(pairsRepository(g).readByBatch(state.batchId).length).toBe(1);
+
+    let guard = 0;
+    while (state.status === "GENERATING_CANDIDATES" && guard++ < 500) {
+      state = advanceScan(g, cfg);
+    }
+    expect(state.status).toBe("SCORING");
+    expect(pairsRepository(g).readByBatch(state.batchId).length).toBe(state.metrics.candidates);
+  });
+
+  it("fails clearly when the sheet exceeds maxParticipantRows", () => {
+    const cfg = cloneDefaultConfig();
+    cfg.execution.maxParticipantRows = 10;
+    cfg.execution.sliceBudgetMs = 0;
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const state = startScan(g, PEOPLE, cfg);
+    expect(state.status).toBe("FAILED");
+    expect(state.errorCode).toBe("SHEET_TOO_LARGE");
+  });
+
+  it("finishes a small sheet inside startScan when slice budget remains", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const final = startScan(g, PEOPLE, cfg);
+    expect(final.status).toBe("READY");
+    expect(final.metrics.records).toBe(20);
+    expect(final.metrics.clusters).toBe(2);
+  });
+
   it("completes a 5,000-row fixture with candidate count under the cap (AT-27)", () => {
     const cfg = cloneDefaultConfig();
-    cfg.execution.pairScoreChunkSize = 1_000_000; // score in a single slice for speed
+    cfg.execution.inMemoryPairScoreMax = 1_000_000; // score in a single slice for speed
+    cfg.execution.sheetWriteChunkSize = 1_000; // fewer drain units in the fake gateway
     const g = newGateway();
     ensureSystemSheets(g, cfg);
 
@@ -183,6 +313,130 @@ describe("scan state machine", () => {
     expect(final.metrics.candidates).toBeLessThan(cfg.blocking.maxTotalCandidates);
     expect(recordsRepository(g).readByBatch(start.batchId, [...HEADERS])).toHaveLength(5000);
   }, 120_000);
+
+  it("starts a new scan from READY by superseding the previous batch", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+
+    const second = startScan(g, PEOPLE, cfg);
+    expect(second.batchId).not.toBe(first.batchId);
+    expect(second.status).toBe("READY");
+    expect(batchesRepository(g).get(first.batchId)?.status).toBe("SUPERSEDED");
+
+    const final = runToEnd(g, cfg);
+    expect(final.status).toBe("READY");
+  });
+
+  it("does no candidate work when an unchanged rescan has only finished keep-all clusters", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    for (const row of clustersRepository(g).listByBatch(first.batchId)) {
+      markKeepAll(g, String(row.clusterId));
+    }
+
+    const second = startScan(g, PEOPLE, cfg);
+    const final = runToEnd(g, cfg);
+
+    expect(final.batchId).toBe(second.batchId);
+    expect(final.metrics.candidates).toBe(0);
+    expect(final.metrics.clusters).toBe(0);
+    expect(clustersRepository(g).listByBatch(second.batchId)).toHaveLength(0);
+  });
+
+  it("rescans a changed row while leaving unrelated keep-all clusters out", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    markKeepAll(g, clusterForRows(g, first.batchId, [2, 3]));
+    markReadyToApply(g, first.batchId, clusterForRows(g, first.batchId, [4, 5]));
+
+    g.writeRange(PEOPLE, "E4", [["22 Edited Elm St"]]);
+
+    const second = startScan(g, PEOPLE, cfg);
+    const final = runToEnd(g, cfg);
+    const clusters = clustersRepository(g).listByBatch(second.batchId);
+
+    expect(final.metrics.candidates).toBeGreaterThan(0);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.status).toBe("UNREVIEWED");
+    expect(clusters[0]?.memberIds as unknown as string[]).toEqual(
+      expect.arrayContaining([
+        idBySourceRow(g, second.batchId).get(4),
+        idBySourceRow(g, second.batchId).get(5),
+      ]),
+    );
+  });
+
+  it("keeps unresolved cluster members dirty even when their rows are unchanged", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    markKeepAll(g, clusterForRows(g, first.batchId, [2, 3]));
+    markUnresolved(g, clusterForRows(g, first.batchId, [4, 5]));
+
+    const second = startScan(g, PEOPLE, cfg);
+    const final = runToEnd(g, cfg);
+    const clusters = clustersRepository(g).listByBatch(second.batchId);
+
+    expect(final.metrics.candidates).toBeGreaterThan(0);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.status).toBe("UNREVIEWED");
+    expect(clusters[0]?.memberIds as unknown as string[]).toEqual(
+      expect.arrayContaining([
+        idBySourceRow(g, second.batchId).get(4),
+        idBySourceRow(g, second.batchId).get(5),
+      ]),
+    );
+  });
+
+  it("carries unchanged ready-to-apply decisions into the new batch", () => {
+    const cfg = cloneDefaultConfig();
+    const g = newGateway();
+    ensureSystemSheets(g, cfg);
+    loadGrid(g, PEOPLE, HEADER, twentyRows());
+
+    const first = startScan(g, PEOPLE, cfg);
+    runToEnd(g, cfg);
+    markKeepAll(g, clusterForRows(g, first.batchId, [2, 3]));
+    const priorDecision = markReadyToApply(
+      g,
+      first.batchId,
+      clusterForRows(g, first.batchId, [4, 5]),
+    );
+
+    const second = startScan(g, PEOPLE, cfg);
+    const final = runToEnd(g, cfg);
+    const [carried] = clustersRepository(g).listByBatch(second.batchId);
+    const carriedDecision = carried?.decision as unknown as ClusterDecision;
+
+    expect(final.metrics.candidates).toBe(0);
+    expect(final.metrics.clusters).toBe(1);
+    expect(carried?.status).toBe("READY_TO_APPLY");
+    expect(carried?.clusterId).not.toBe(priorDecision.clusterId);
+    expect(carriedDecision.batchId).toBe(second.batchId);
+    expect(carriedDecision.clusterId).toBe(carried?.clusterId);
+    expect(carriedDecision.expectedRevision).toBe(carried?.revision);
+    expect(carriedDecision.notes).toBe("carry me");
+    expect(String(carried?.decisionHash)).toBe(decisionHash(carriedDecision));
+  });
 
   it("never writes participant values — only the _Dedup_ID column changes", () => {
     const cfg = cloneDefaultConfig();
@@ -290,17 +544,19 @@ describe("scan state machine", () => {
 
   it("releases the workbook so a fresh scan can start after a cancel", () => {
     const cfg = cloneDefaultConfig();
+    cfg.execution.sliceBudgetMs = 0; // leave the first scan mid-flight
     const g = newGateway();
     ensureSystemSheets(g, cfg);
     loadGrid(g, PEOPLE, HEADER, twentyRows());
 
     const first = startScan(g, PEOPLE, cfg);
-    advanceScan(g, cfg); // leave it mid-scan, not at READY
+    expect(first.status).not.toBe("READY");
     cancelScan(g, cfg);
 
+    cfg.execution.sliceBudgetMs = 25_000;
     const second = startScan(g, PEOPLE, cfg);
     expect(second.batchId).not.toBe(first.batchId);
-    expect(runToEnd(g, cfg).status).toBe("READY");
+    expect(second.status).toBe("READY");
     // The cancelled batch's rows did not leak into the new one.
     expect(clustersRepository(g).listByBatch(first.batchId)).toHaveLength(0);
     expect(clustersRepository(g).listByBatch(second.batchId)).toHaveLength(2);

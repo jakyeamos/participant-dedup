@@ -36,6 +36,12 @@ export interface LoadSheetOptions {
   sheetId?: number;
 }
 
+export interface DumpedSheet {
+  info: SheetInfo;
+  values: GridValues;
+  hiddenColumns: number[];
+}
+
 interface FakeSheet {
   info: SheetInfo;
   grid: GridValues;
@@ -371,5 +377,18 @@ export class FakeSheetsGateway implements SheetsGateway {
   /** Test hook: the cell `activateCell` last selected. */
   activatedCell(): ActivatedCell | null {
     return this.lastActivatedCell ? { ...this.lastActivatedCell } : null;
+  }
+
+  /** Snapshot hook used by the Node API bridge after running the scan engine. */
+  dumpSheets(): DumpedSheet[] {
+    return [...this.sheets.values()]
+      .map((sheet) => ({
+        info: { ...sheet.info },
+        values: sheet.grid.map((row) => [...row]),
+        hiddenColumns: [...this.hiddenColumns]
+          .filter((key) => key.startsWith(`${sheet.info.title}:`))
+          .map((key) => Number(key.slice(key.lastIndexOf(":") + 1))),
+      }))
+      .sort((a, b) => a.info.index - b.info.index);
   }
 }

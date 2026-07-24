@@ -56,6 +56,7 @@ export const WARNINGS = [
   "SAME_HOUSEHOLD_ONLY",
   "INCOMPLETE_SOURCE_DATA",
   "INVALID_DOB",
+  "PLACEHOLDER_DOB",
   "POSSIBLE_CHAIN_CLUSTER",
   "CANDIDATE_TRUNCATION",
   "FORMULA_FIELD_SKIPPED",
@@ -75,6 +76,7 @@ export const BATCH_STATUSES = [
   "APPLIED",
   "CANCELLED",
   "FAILED",
+  "SUPERSEDED",
 ] as const;
 
 export type BatchStatus = (typeof BATCH_STATUSES)[number];

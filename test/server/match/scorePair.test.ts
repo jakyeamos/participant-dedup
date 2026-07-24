@@ -100,14 +100,32 @@ describe("scorePair acceptance matrix", () => {
     expect(s.reasons).toContain("PARENTHETICAL_ALIAS");
   });
 
-  it("AT-07 placeholder DOB on both sides contributes no points and no conflict", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "01/01/1900", zip: "02118" });
-    const b = rec("2", { first: "John", last: "Public", dob: "01/01/1900", zip: "02118" });
+  it("AT-07 placeholder DOB contributes no points but does not block HIGH when the rest matches", () => {
+    const a = rec("1", {
+      first: "John",
+      last: "Public",
+      dob: "01/01/1900",
+      zip: "02118",
+      address: "1 Main St",
+      city: "Boston",
+      state: "MA",
+    });
+    const b = rec("2", {
+      first: "John",
+      last: "Public",
+      dob: "01/01/1900",
+      zip: "02118",
+      address: "1 Main St",
+      city: "Boston",
+      state: "MA",
+    });
     const s = scorePair(a, b, cfg);
     expect(s.components.dobPoints).toBe(0);
     expect(s.flags.dobExact).toBe(false);
     expect(s.flags.dobConflict).toBe(false);
     expect(s.warnings).not.toContain("CONFLICTING_VALID_DOB");
+    expect(s.warnings).toContain("PLACEHOLDER_DOB");
+    expect(s.confidence).toBe("HIGH");
   });
 
   it("AT-08 conflicting valid DOBs (strong name + same ZIP) -> LOW + CONFLICTING_VALID_DOB", () => {

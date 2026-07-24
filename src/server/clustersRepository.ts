@@ -6,7 +6,7 @@ import { tableFor } from "@/server/systemSheets";
 export type ClusterRecord = Record<string, CellValue>;
 
 export interface ClustersRepository {
-  append(clusters: Record<string, unknown>[]): void;
+  append(clusters: Record<string, unknown>[], chunkSize?: number): void;
   get(clusterId: string): ClusterRecord | null;
   update(clusterId: string, patch: Record<string, unknown>): void;
   listByBatch(batchId: string): ClusterRecord[];
@@ -18,8 +18,8 @@ export function clustersRepository(gateway: SheetsGateway): ClustersRepository {
   const table = tableFor(gateway, SYSTEM_SHEETS.clusters);
 
   return {
-    append(clusters: Record<string, unknown>[]): void {
-      table.appendMany(clusters);
+    append(clusters: Record<string, unknown>[], chunkSize = 50): void {
+      table.appendMany(clusters, chunkSize);
     },
 
     get(clusterId: string): ClusterRecord | null {
@@ -40,9 +40,12 @@ export function clustersRepository(gateway: SheetsGateway): ClustersRepository {
     },
 
     deleteByBatch(batchId: string): void {
-      for (const { index, rec } of table.rowsWithIndex()) {
-        if (rec.batchId === batchId) table.writeAt(index, {});
-      }
+      table.blankIndexes(
+        table
+          .rowsWithIndex()
+          .filter((row) => row.rec.batchId === batchId)
+          .map((row) => row.index),
+      );
     },
   };
 }
