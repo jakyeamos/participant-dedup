@@ -646,10 +646,10 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 **Interfaces:**
 - Produces: tests that scan `src/**` for `UrlFetchApp`, `fetch(`, `http://`, `https://` (allow only in comments/spec refs), and for hardcoded spreadsheet-id-shaped strings; assert fixtures/tests contain no real-name denylist.
 
-- [ ] **Step 1: Write** the static scans (AT-28 proxy: no external-call constructs in source).
-- [ ] **Step 2: Run** full ladder: `pnpm typecheck && pnpm vitest run && pnpm build`. Expected: all PASS.
-- [ ] **Step 3: Fix** any failures.
-- [ ] **Step 4: Commit.** `git commit -m "test: static no-external-call + no-PII gates; full suite green"`
+- [x] **Step 1: Write** the static scans (AT-28 proxy: no external-call constructs in source).
+- [x] **Step 2: Run** full ladder: `pnpm typecheck && pnpm vitest run && pnpm build`. Expected: all PASS.
+- [x] **Step 3: Fix** any failures.
+- [x] **Step 4: Commit.** `git commit -m "test: static no-external-call + no-PII gates; full suite green"`
 
 ---
 
