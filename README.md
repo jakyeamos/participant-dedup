@@ -2,8 +2,9 @@
 
 Container-bound Google Apps Script that finds fuzzy duplicate participant rows,
 lets a reviewer decide what to keep, and applies deletions atomically with an
-audit trail. Matching runs entirely inside the spreadsheet — no external APIs,
-no remote assets, no participant data in the repository.
+audit trail. Matching runs on an owned Railway backend for large sheets; review and apply stay
+inside the spreadsheet sidebar. No third-party matching APIs, no remote sidebar
+assets, and no participant data in the repository.
 
 ## Requirements
 
@@ -11,6 +12,8 @@ no remote assets, no participant data in the repository.
 - [pnpm](https://pnpm.io/)
 - A Google account that can edit a **copy** of the target workbook
 - [`clasp`](https://github.com/google/clasp) (installed via this repo's `pnpm` deps)
+- For production-scale scans: a Railway service + Google service account
+  (see [`docs/BACKEND.md`](docs/BACKEND.md))
 
 ## Setup
 
@@ -42,29 +45,64 @@ Do **not** push to the production participant workbook. Always use a copy.
    ```
 3. **Push the build**
    ```bash
-   pnpm build
-   pnpm exec clasp push
+   pnpm push
    ```
    `.clasp.json` sets `rootDir` to `dist`, so clasp uploads only the built
    artifacts.
 4. **Enable Advanced Sheets service**
    - Open the Apps Script project → **Services** → add **Google Sheets API**
      (`Sheets`, v4) if the manifest did not enable it automatically.
-5. **Authorize**
+5. **Configure the Railway scan backend** (required for large sheets)
+   - Follow [`docs/BACKEND.md`](docs/BACKEND.md).
+   - Set Script Properties `DEDUP_API_URL` and `DEDUP_API_KEY`.
+   - Share the workbook with the service account as Editor.
+6. **Authorize**
    - Open the bound spreadsheet copy.
    - Run **Deduplication → Open Review Sidebar** once and accept the OAuth
-     prompts (`spreadsheets`, `script.container.ui`, `userinfo.email`).
-6. **UAT on the copy** (synthetic or redacted data only)
+     prompts (`spreadsheets`, `script.container.ui`, `userinfo.email`,
+     `script.external_request`).
+7. **UAT on the copy** (synthetic or redacted data only)
    - [ ] Scan Active Sheet completes through to a review queue
    - [ ] Hostile cell text like `<script>` renders as text, not markup
    - [ ] Default queue shows High + Medium only
    - [ ] Saving a decision does not change participant values
-   - [ ] Apply without typing the confirmation sentence is rejected
+   - [ ] Apply without typing `confirm` is rejected
    - [ ] Confirmed apply deletes only the reviewed rows and writes audit history
    - [ ] Re-running apply is a no-op
    - [ ] Editing a reviewed row marks the cluster stale and blocks apply
    - [ ] Keep All suppresses an unchanged group on the next scan
    - [ ] Duplicate `_Dedup_ID` values stop the scan until Repair Duplicate IDs runs
+
+## Sharing with coworkers
+
+Use the lane that matches how portable the tool needs to be.
+
+### Template workbook
+
+For a small group or one-off UAT, share a spreadsheet copy that already has the
+script bound to it. The coworker makes a copy, imports or pastes their
+participant data into a tab, and runs **Deduplication → Scan Active Sheet**.
+Share that copy with the scan **service account** as Editor so Railway can run.
+
+### Sheets Editor Add-on
+
+For coworkers who need to run the tool on their own spreadsheet files, use the
+standalone add-on lane:
+
+```bash
+cp .clasp.addon.json.example .clasp.addon.json
+pnpm addon:push
+```
+
+The real `.clasp.addon.json` points at a standalone Apps Script project and is
+ignored by git. Coworkers install the add-on once, open any non-production
+spreadsheet they can edit, and run the Deduplication menu there. Each workbook
+must still be shared with the service account; Script Properties on the add-on
+project hold `DEDUP_API_URL` / `DEDUP_API_KEY`.
+
+See [`docs/ADDON_PACKAGING.md`](docs/ADDON_PACKAGING.md) for standalone project,
+OAuth, test deployment, and internal Workspace publishing steps. See
+[`docs/BACKEND.md`](docs/BACKEND.md) for Railway + service-account setup.
 
 ## Useful scripts
 
@@ -73,9 +111,16 @@ Do **not** push to the production participant workbook. Always use a copy.
 | `pnpm typecheck` | Strict TypeScript |
 | `pnpm test` | Full vitest suite |
 | `pnpm build` | Emit `dist/` |
+| `pnpm api:dev` / `pnpm api:start` | Run the Railway scan API locally |
+| `pnpm push` | Build and push to the workbook-bound `.clasp.json` target |
+| `pnpm addon:push` | Build and push to the standalone add-on target |
+| `pnpm addon:version` | Create an immutable Apps Script add-on version |
+| `pnpm addon:deploy` | Create an Apps Script deployment from the add-on target |
 | `pnpm fixture` | Write a synthetic CSV under `tools/out/` |
 | `pnpm dogfood` | Precision/recall gate on 5,000 synthetic rows |
 | `pnpm sheet-dogfood` | End-to-end scan→queue→apply rehearsal on a CSV via FakeSheetsGateway |
+| `pnpm dedup …` | Local CLI — simple: `scan` / `review` / `apply` after `dedup.config.json` ([`docs/COWORKER.md`](docs/COWORKER.md)) |
+| `pnpm dedup:compile` | Build standalone `dist-bin/dedup` with Bun |
 
 ## Live Google Sheet dogfood
 

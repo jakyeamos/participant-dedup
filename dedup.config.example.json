@@ -1,0 +1,6 @@
+{
+  "backend": "sheets",
+  "spreadsheet": "12hg6RpJRa1sPX_EndfHr5cezRWDiao6hjl4WoL64XU8",
+  "sheet": "PUT_TAB_NAME_HERE",
+  "saJson": "./sa.json"
+}

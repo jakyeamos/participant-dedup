@@ -1,10 +1,15 @@
 node_modules/
 dist/
+.pnpm-store/
 .clasp.json
+.clasp.addon.json
 *.log
 .DS_Store
 coverage/
 tools/out/
+dist-bin/
+dedup.config.json
+sa.json
 
 # Keep the esbuild entry and its tests even when a global `build/` ignore exists.
 !build/
