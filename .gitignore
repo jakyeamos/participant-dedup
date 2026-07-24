@@ -5,3 +5,9 @@ dist/
 .DS_Store
 coverage/
 tools/out/
+
+# Keep the esbuild entry and its tests even when a global `build/` ignore exists.
+!build/
+!build/**
+!test/build/
+!test/build/**

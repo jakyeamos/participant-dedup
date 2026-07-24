@@ -630,11 +630,11 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 **Interfaces:**
 - Produces: `pnpm build` emits `dist/Code.js` (IIFE, ES2019, all globals attached to `globalThis`), `dist/Sidebar.html` (sidebar.js + css inlined, no remote assets), `dist/appsscript.json`.
 
-- [ ] **Step 1: Write failing test:** after build, `dist/Code.js` exists, contains `function onOpen`, contains NO `import`/`require`/`UrlFetchApp`/`http`; `dist/Sidebar.html` contains no `src="http`/`href="http`.
-- [ ] **Step 2: Run** → FAIL.
-- [ ] **Step 3: Implement** esbuild config (bundle server as IIFE, define globals; inline sidebar assets).
-- [ ] **Step 4: Run** `pnpm build && pnpm vitest run test/build/dist.test.ts` → PASS.
-- [ ] **Step 5: Commit.** `git commit -m "build: esbuild bundle to dist/"`
+- [x] **Step 1: Write failing test:** after build, `dist/Code.js` exists, contains `function onOpen`, contains NO `import`/`require`/`UrlFetchApp`/`http`; `dist/Sidebar.html` contains no `src="http`/`href="http`.
+- [x] **Step 2: Run** → FAIL.
+- [x] **Step 3: Implement** esbuild config (bundle server as IIFE, define globals; inline sidebar assets).
+- [x] **Step 4: Run** `pnpm build && pnpm vitest run test/build/dist.test.ts` → PASS.
+- [x] **Step 5: Commit.** `git commit -m "build: esbuild bundle to dist/"`
 
 ---
 
