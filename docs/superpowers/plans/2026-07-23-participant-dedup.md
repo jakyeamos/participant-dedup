@@ -661,10 +661,10 @@ Note: Apps Script exposes `Utilities.computeDigest`. For pure testability, `sha2
 **Interfaces:**
 - Produces: README with setup/build/test/push/authorization/Advanced-Sheets-enable/UAT steps (§36 items 6–8); implementation report listing tests run, dogfood precision/recall numbers, assumptions, deviations, remaining risks (broader `spreadsheets` scope, collaborative-edit race, audit tamper limits — §36 items 3/10); `.clasp.json.example` (no real script ID committed).
 
-- [ ] **Step 1: Write** README with the exact owner hand-off checklist (clasp login → clasp push to a **copy** → enable Advanced Sheets → authorize → UAT). All commands use pnpm.
-- [ ] **Step 2: Write** implementation report from actual test/dogfood output.
-- [ ] **Step 3: Run** `pnpm typecheck && pnpm vitest run && pnpm build` once more → PASS.
-- [ ] **Step 4: Commit.** `git commit -m "docs: README + implementation report + clasp example"`
+- [x] **Step 1: Write** README with the exact owner hand-off checklist (clasp login → clasp push to a **copy** → enable Advanced Sheets → authorize → UAT). All commands use pnpm.
+- [x] **Step 2: Write** implementation report from actual test/dogfood output.
+- [x] **Step 3: Run** `pnpm typecheck && pnpm vitest run && pnpm build` once more → PASS.
+- [x] **Step 4: Commit.** `git commit -m "docs: README + implementation report + clasp example"`
 
 ---
 
