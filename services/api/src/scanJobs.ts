@@ -60,7 +60,7 @@ function remoteConfig(base: DedupConfig = cloneDefaultConfig()): DedupConfig {
   cfg.execution.recordWriteChunkSize = Math.max(cfg.execution.recordWriteChunkSize, 500);
   cfg.execution.pairScoreChunkSize = Math.max(cfg.execution.pairScoreChunkSize, 5000);
   // Keep remote matching under a tighter candidate ceiling than the legacy 200k default.
-  cfg.blocking.maxTotalCandidates = Math.min(cfg.blocking.maxTotalCandidates, 100000);
+  cfg.blocking.maxTotalCandidates = Math.min(cfg.blocking.maxTotalCandidates, 300000);
   cfg.blocking.fuzzyOnlyCandidatesPerRecord = Math.min(
     cfg.blocking.fuzzyOnlyCandidatesPerRecord,
     50,

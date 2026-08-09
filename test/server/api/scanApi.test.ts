@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiApp } from "../../../services/api/src/app";
-import { runScanOnGateway } from "../../../services/api/src/scanJobs";
+import { remoteConfig, runScanOnGateway } from "../../../services/api/src/scanJobs";
 import { FakeSheetsGateway } from "@/server/sheets/FakeSheetsGateway";
 import { ensureSystemSheets } from "@/server/systemSheets";
 import { cloneDefaultConfig } from "@/shared/config";
@@ -12,6 +12,14 @@ const HEADER = ["First Name", "Last Name", "DOB", "ZIP", "Address", "City", "Sta
 const DUP = ["Ann", "Lee", "1/1/1980", "01234", "10 Oak St", "Boston", "MA"];
 
 describe("services/api scan jobs", () => {
+  it("caps remote candidate budgets without mutating the caller config", () => {
+    const cfg = cloneDefaultConfig();
+    cfg.blocking.maxTotalCandidates = 500_000;
+
+    expect(remoteConfig(cfg).blocking.maxTotalCandidates).toBe(300_000);
+    expect(cfg.blocking.maxTotalCandidates).toBe(500_000);
+  });
+
   it("runs the sync engine on an in-memory workbook and produces clusters", () => {
     const cfg = cloneDefaultConfig();
     const g = new FakeSheetsGateway({

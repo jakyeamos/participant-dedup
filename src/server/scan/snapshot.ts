@@ -103,9 +103,16 @@ export function buildSnapshots(
       fpFormula.push(formulas[c] ?? "");
     }
 
+    const dedupId = idCol >= 0 ? String(rawValues[idCol] ?? "") : "";
+    if (idCol >= 0 && isBlank(dedupId)) {
+      throw new Error(
+        `Missing _Dedup_ID at source row ${dataStart + i} — ID assignment did not stick before snapshot`,
+      );
+    }
+
     out.push({
       batchId,
-      dedupId: idCol >= 0 ? String(rawValues[idCol] ?? "") : "",
+      dedupId,
       sourceRowAtScan: dataStart + i,
       rowFingerprint: rowFingerprint(fpHeaders, fpRaw, fpDisplay, fpFormula),
       relevantHash: relevantHash(relevantFields(normalized)),
