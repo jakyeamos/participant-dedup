@@ -6,7 +6,7 @@ describe("DEFAULT_CONFIG", () => {
     expect(DEFAULT_CONFIG.thresholds.high).toBe(80);
     expect(DEFAULT_CONFIG.weights.name).toBe(60);
     expect(DEFAULT_CONFIG.penalties.dobConflict).toBe(35);
-    expect(DEFAULT_CONFIG.blocking.maxTotalCandidates).toBe(100000);
+    expect(DEFAULT_CONFIG.blocking.maxTotalCandidates).toBe(300000);
     expect(DEFAULT_CONFIG.blocking.candidateWarnAt).toBe(20000);
     expect(DEFAULT_CONFIG.execution.maxAtomicApplyRequests).toBe(900);
   });

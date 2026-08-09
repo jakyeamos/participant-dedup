@@ -123,7 +123,7 @@ describe("buildMergePlan", () => {
     expect(plan.conflicts).toEqual([]);
   });
 
-  it("AT-15: blank protected fields are never auto-filled", () => {
+  it("AT-15: blank identity fields are auto-filled so deletes do not drop name/DOB", () => {
     const records = [
       rec("r1", 2, { Last: "Public", Phone: "555-0100" }),
       rec("d1", 3, { First: "John", Last: "Public", "Date of Birth": "1990-01-01" }),
@@ -137,9 +137,17 @@ describe("buildMergePlan", () => {
     );
 
     expect(plan.ok).toBe(true);
-    expect(plan.fills.map((f) => f.header)).not.toContain("First");
-    expect(plan.fills.map((f) => f.header)).not.toContain("Date of Birth");
-    expect(plan.fills).toEqual([]);
+    expect(plan.fills).toEqual(
+      expect.arrayContaining([
+        { retainedId: "r1", header: "First", value: "John", sourceId: "d1" },
+        {
+          retainedId: "r1",
+          header: "Date of Birth",
+          value: "1990-01-01",
+          sourceId: "d1",
+        },
+      ]),
+    );
   });
 
   it("never fills the _Dedup_ID column", () => {

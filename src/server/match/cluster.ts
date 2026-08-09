@@ -106,7 +106,9 @@ export function formCluster(scores: PairScore[], _cfg: DedupConfig): Cluster[] {
         pushEdge(evidenceByRoot, rootR, e);
       }
     } else if (lCore || rCore) {
-      // rule 2: one endpoint outside — attach it to its strongest-Low core.
+      // rule 2: one endpoint outside — attach only when the Low edge still has
+      // a credible name (shared DOB alone must not suggest unrelated people).
+      if (e.components.nameSimilarity < 0.75) continue;
       const outside = lCore ? e.rightId : e.leftId;
       const root = uf.find(lCore ? e.leftId : e.rightId);
       const current = attachByOutside.get(outside);

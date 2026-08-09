@@ -79,5 +79,8 @@ export function normalizeDob(
   if (cfg.placeholderDates.includes(iso)) {
     return { value: iso, state: "PLACEHOLDER" };
   }
+  if (cfg.treatJanuaryFirstAsPlaceholder && iso.endsWith("-01-01")) {
+    return { value: iso, state: "PLACEHOLDER" };
+  }
   return { value: iso, state: "VALID" };
 }

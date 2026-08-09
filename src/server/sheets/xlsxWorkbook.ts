@@ -41,9 +41,23 @@ function cellToValue(cell: ExcelJS.Cell): CellValue {
   return String(v);
 }
 
+/**
+ * Google Sheets → xlsx exports often leave `_Dedup_ID` far to the right of the
+ * used data rectangle (`actualColumnCount` << `columnCount`). Prefer the wider
+ * bound and always include non-empty header cells.
+ */
+function usedColCount(ws: ExcelJS.Worksheet): number {
+  let max = Math.max(ws.actualColumnCount || 0, ws.columnCount || 0);
+  const header = ws.getRow(1);
+  header.eachCell({ includeEmpty: false }, (_cell, colNumber) => {
+    max = Math.max(max, colNumber);
+  });
+  return max;
+}
+
 function sheetToGrid(ws: ExcelJS.Worksheet): GridValues {
   const rowCount = ws.actualRowCount || ws.rowCount;
-  const colCount = ws.actualColumnCount || ws.columnCount;
+  const colCount = usedColCount(ws);
   if (rowCount === 0 || colCount === 0) return [];
   const grid: GridValues = [];
   for (let r = 1; r <= rowCount; r++) {

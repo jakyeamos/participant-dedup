@@ -24,6 +24,24 @@ describe("normalizeDob", () => {
     expect(normalizeDob("01/01/1900", tz, cfg).state).toBe("PLACEHOLDER");
   });
 
+  it("classifies any January 1 date as PLACEHOLDER when configured", () => {
+    expect(normalizeDob("01/01/2004", tz, cfg)).toEqual({
+      value: "2004-01-01",
+      state: "PLACEHOLDER",
+    });
+    expect(normalizeDob("1975-01-01", tz, cfg).state).toBe("PLACEHOLDER");
+  });
+
+  it("keeps non-January-1 dates VALID", () => {
+    expect(normalizeDob("01/02/2004", tz, cfg).state).toBe("VALID");
+  });
+
+  it("can disable January-1 placeholder treatment", () => {
+    const local = cloneDefaultConfig();
+    local.treatJanuaryFirstAsPlaceholder = false;
+    expect(normalizeDob("01/01/2004", tz, local).state).toBe("VALID");
+  });
+
   it("classifies blank as MISSING", () => {
     expect(normalizeDob("", tz, cfg).state).toBe("MISSING");
     expect(normalizeDob(null, tz, cfg).state).toBe("MISSING");

@@ -95,6 +95,16 @@ describe("formCluster", () => {
     expect(c.topConfidence).toBe("HIGH");
   });
 
+  it("does not suggest-attach on a LOW edge with only weak name similarity", () => {
+    const weak = edge("A", "S", "LOW", 62);
+    weak.components.nameSimilarity = 0.62;
+    weak.flags.exactDirectName = false;
+    const clusters = formCluster([edge("A", "B", "HIGH"), weak], cfg);
+    const c = clusters.find((row) => row.memberIds.includes("A"))!;
+    expect(c.suggestedMemberIds).toEqual([]);
+    expect(c.memberIds).not.toContain("S");
+  });
+
   it("flags OVERSIZED clusters and blocks deletion when members exceed the ceiling", () => {
     const scores: PairScore[] = [];
     for (let i = 1; i <= 51; i++) scores.push(edge("R0", `R${i}`, "HIGH"));

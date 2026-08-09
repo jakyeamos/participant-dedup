@@ -20,7 +20,7 @@ pnpm dedup review --file ./participants.dedup.xlsx    # interactive TUI
 pnpm dedup apply --file ./participants.dedup.xlsx --confirm
 ```
 
-Or non-interactive keep-first:
+Or non-interactive (keep richest row + merge blanks):
 
 ```bash
 pnpm dedup auto-review --file ./participants.dedup.xlsx --confidence HIGH

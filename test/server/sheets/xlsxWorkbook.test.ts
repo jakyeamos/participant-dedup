@@ -75,4 +75,28 @@ describe("xlsx workbook IO", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("loads a sparse trailing _Dedup_ID header beyond actualColumnCount", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dedup-xlsx-sparse-"));
+    const path = join(dir, "sparse.xlsx");
+    try {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Participants");
+      ws.getCell(1, 1).value = "First";
+      ws.getCell(1, 2).value = "Last";
+      ws.getCell(1, 3).value = "DOB";
+      ws.getCell(1, 27).value = "_Dedup_ID";
+      ws.getCell(2, 1).value = "Ada";
+      ws.getCell(2, 2).value = "Lovelace";
+      ws.getCell(2, 3).value = "1815-12-10";
+      await wb.xlsx.writeFile(path);
+
+      const g = await loadXlsxFile(path, { activeSheetName: "Participants" });
+      const header = g.readRange("Participants", "A1:AA1")[0] ?? [];
+      expect(header[26]).toBe("_Dedup_ID");
+      expect(g.getGridSize("Participants").columnCount).toBeGreaterThanOrEqual(27);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

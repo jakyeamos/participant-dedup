@@ -4,6 +4,11 @@ export const DEFAULT_CONFIG = {
   schemaVersion: 1,
   headerSearchRows: 25,
   placeholderDates: ["1900-01-01"],
+  /**
+   * Sheet exports often use January 1 as a missing-DOB sentinel (any year).
+   * Those must not count as identity-level exact DOB matches.
+   */
+  treatJanuaryFirstAsPlaceholder: true,
   missingLabels: ["", "unknown", "n/a", "na", "none", "null", "not available"],
   thresholds: {
     high: 80,
@@ -32,7 +37,7 @@ export const DEFAULT_CONFIG = {
     trigramPostingMax: 150,
     fuzzyOnlyCandidatesPerRecord: 50,
     /** Hard cap — over this, generation stops and `truncated` is set. */
-    maxTotalCandidates: 100000,
+    maxTotalCandidates: 300000,
     /** Soft warn threshold surfaced in scan metrics / UI. */
     candidateWarnAt: 20000,
   },

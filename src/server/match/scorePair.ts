@@ -8,12 +8,20 @@ import type { Confidence, NameMatchMethod } from "@/shared/constants";
 import { nameSimilarity } from "./nameSimilarity";
 import { addressSimilarity } from "./addressSimilarity";
 import { contextSimilarity } from "./contextSimilarity";
+import { jaroWinkler } from "./jaroWinkler";
 
 const STRONG_ADDRESS = 0.85;
 const NAME_ONLY_ADDRESS_MAX = 0.5;
+/** Single-token given-name typos (Jon/John). Multi-token names are stricter. */
+const GIVEN_NAME_MATCH = 0.92;
+const LAST_NAME_MATCH = 0.92;
 
 function sortDedupe(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
 function dobExactValid(a: NormalizedParticipant, b: NormalizedParticipant): boolean {
@@ -41,6 +49,54 @@ function hasInitialMiddle(a: NormalizedParticipant, b: NormalizedParticipant): b
   const aInit = am.length === 1 && am[0]!.length === 1;
   const bInit = bm.length === 1 && bm[0]!.length === 1;
   return aInit || bInit;
+}
+
+/**
+ * Same given-name identity (not merely a shared first token like "Abdul …").
+ * Single-token typos are allowed; multi-token given names must nearly match.
+ */
+function givenNamesCompatible(a: NormalizedParticipant, b: NormalizedParticipant): boolean {
+  const fa = a.name.firstTokens;
+  const fb = b.name.firstTokens;
+  if (fa.length === 0 || fb.length === 0) return true;
+  if (arraysEqual(fa, fb)) return true;
+  if (fa.length === 1 && fa[0]!.length === 1 && fb[0]?.[0] === fa[0]) return true;
+  if (fb.length === 1 && fb[0]!.length === 1 && fa[0]?.[0] === fb[0]) return true;
+
+  const sim = jaroWinkler(fa.join(" "), fb.join(" "));
+  if (fa.length === 1 && fb.length === 1) return sim >= GIVEN_NAME_MATCH;
+  // Abdul Wahid vs Abdul Wodod — shared prefix is household, not identity.
+  if (fa[0] === fb[0] && fa.length === fb.length && sim >= 0.96) return true;
+  return sim >= 0.98;
+}
+
+function isMissingNamePart(tokens: readonly string[], cfg: DedupConfig): boolean {
+  if (tokens.length === 0) return true;
+  if (tokens.length !== 1) return false;
+  const token = tokens[0]!;
+  return cfg.missingLabels.some((label) => label.trim().toLowerCase() === token);
+}
+
+function lastNamesCompatible(
+  a: NormalizedParticipant,
+  b: NormalizedParticipant,
+  cfg: DedupConfig,
+): boolean {
+  const la = a.name.lastTokens;
+  const lb = b.name.lastTokens;
+  const aMissing = isMissingNamePart(la, cfg);
+  const bMissing = isMissingNamePart(lb, cfg);
+  // A missing last on only one side is incomplete identity, not a match.
+  if (aMissing && bMissing) return true;
+  if (aMissing || bMissing) return false;
+  if (arraysEqual(la, lb)) return true;
+  return jaroWinkler(la.join(" "), lb.join(" ")) >= LAST_NAME_MATCH;
+}
+
+function hasCompleteName(p: NormalizedParticipant, cfg: DedupConfig): boolean {
+  return (
+    !isMissingNamePart(p.name.firstTokens, cfg) && !isMissingNamePart(p.name.lastTokens, cfg)
+  );
 }
 
 /**
@@ -117,6 +173,8 @@ export function scorePair(
     !meaningfulContext;
 
   // §16.2 eligibility, with the §16.3 DOB-conflict exception.
+  // Shared DOB with only a weak name is coincidence (same birthday cohort),
+  // not identity — require a strong name floor before the pair is eligible.
   let eligible: boolean;
   if (dobConf) {
     eligible =
@@ -125,9 +183,8 @@ export function scorePair(
   } else {
     eligible =
       nameSim >= thresholds.nameOnlySimilarity ||
-      (nameSim >= thresholds.meaningfulNameSimilarity && identitySupport) ||
+      (nameSim >= thresholds.strongNameSimilarity && identitySupport) ||
       (nameSim >= thresholds.strongNameSimilarity && householdSupport) ||
-      (dobExact && nameSim >= 0.52) ||
       (reversal && nameSim >= thresholds.strongNameSimilarity) ||
       (strongAlias && (dobExact || zipExact || addressSim >= 0.5));
   }
@@ -137,21 +194,47 @@ export function scorePair(
     eligible = false;
   }
 
+  // Both given + last must look like the same person before HIGH/MEDIUM can merge
+  // clusters. Reversal needs complete names on both sides so a blank last name
+  // cannot hub-merge every Mohamed/Mohammad variant.
+  const completeNames = hasCompleteName(na, cfg) && hasCompleteName(nb, cfg);
+  const nameIdentityOk =
+    nameRes.exactDirect ||
+    (nameRes.exactReversal && completeNames) ||
+    (nameRes.likelyReversal && completeNames) ||
+    nameRes.method === "ALIAS" ||
+    (givenNamesCompatible(na, nb) && lastNamesCompatible(na, nb, cfg));
+
   // §16.5 confidence assignment.
   let confidence: Confidence;
+  const householdNotIdentity =
+    !givenNamesCompatible(na, nb) &&
+    !dobExact &&
+    !nameRes.exactReversal &&
+    !nameRes.likelyReversal &&
+    nameRes.method !== "ALIAS";
+
   if (!eligible) {
     confidence = "EXCLUDED";
   } else if (dobConf || nameOnly) {
+    confidence = "LOW";
+  } else if (!nameIdentityOk || householdNotIdentity) {
+    // Different people can share an address, a Jan-default DOB, or a common
+    // token (Mohamed/Ali/Abdul). Those are LOW evidence, never core merges.
     confidence = "LOW";
   } else {
     const strongContext = contextPtsRaw >= weights.context;
     // Exact/reversed name plus household support is enough for High structurally —
     // placeholder/missing DOB must not block that band (flagged separately below).
+    // Household ZIP/address alone requires a near-exact full name (not "similar
+    // last name + cohabitation"), or whole households chain into megaclusters.
     const highSupport =
       nameSim >= thresholds.strongNameSimilarity &&
       (dobExact ||
-        (zipExact && addressSim >= 0.55) ||
-        (exactNameRelationship && (zipExact || addressStrong || strongContext)));
+        (exactNameRelationship && (zipExact || addressStrong || strongContext)) ||
+        (nameSim >= thresholds.veryStrongNameSimilarity &&
+          zipExact &&
+          addressSim >= 0.55));
     const dobNonEvidence = !dobExact && !dobConf;
     const meetsHighScore =
       totalScore >= thresholds.high ||
@@ -160,9 +243,10 @@ export function scorePair(
         totalScore >= thresholds.medium &&
         totalScore + weights.dob >= thresholds.high);
     const highOk = highSupport && meetsHighScore;
+    // DOB alone must not create MEDIUM — require a real name-identity shape.
     const mediumOk =
       totalScore >= thresholds.medium &&
-      (nameSim >= 0.7 || dobExact || nameRes.exactReversal || nameRes.likelyReversal);
+      (nameSim >= 0.7 || nameRes.exactReversal || nameRes.likelyReversal);
     if (highOk) confidence = "HIGH";
     else if (mediumOk) confidence = "MEDIUM";
     else if (totalScore >= thresholds.low) confidence = "LOW";
@@ -228,7 +312,7 @@ export function scorePair(
   if (nameRes.middleConflict) warnings.push("MIDDLE_NAME_CONFLICT");
   if (
     (zipExact || addressStrong) &&
-    nameSim < thresholds.meaningfulNameSimilarity
+    (nameSim < thresholds.meaningfulNameSimilarity || householdNotIdentity || !nameIdentityOk)
   ) {
     warnings.push("SAME_HOUSEHOLD_ONLY");
   }

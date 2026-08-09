@@ -1,9 +1,6 @@
 import type { Cluster, ClusterDecision, RecordSnapshot, SourceSchema } from "@/server/types";
 import type { DedupConfig } from "@/shared/config";
-import type { CanonicalField, Warning } from "@/shared/constants";
-
-/** §22.3 Identity fields a reviewer must edit by hand — never auto-filled. */
-const PROTECTED_CANONICAL_FIELDS: CanonicalField[] = ["first", "middle", "last", "dob"];
+import type { Warning } from "@/shared/constants";
 
 export type MergePlanIssue =
   | "NO_RETAINED"
@@ -56,14 +53,9 @@ function displayAt(rec: RecordSnapshot, header: string): string {
   return String(rec.displayByHeader[header] ?? "");
 }
 
-function protectedHeaders(schema: SourceSchema): Set<string> {
+/** Only the synthetic id column is never a fill target. Blank name/DOB/etc. may be filled. */
+function neverFillHeaders(schema: SourceSchema): Set<string> {
   const out = new Set<string>();
-  for (const field of PROTECTED_CANONICAL_FIELDS) {
-    const col = schema.columnByCanonicalField[field];
-    if (col === undefined) continue;
-    const header = schema.headers[col];
-    if (header !== undefined) out.add(header);
-  }
   const idHeader = schema.headers[schema.dedupIdColumnIndex];
   if (idHeader !== undefined) out.add(idHeader);
   return out;
@@ -148,12 +140,14 @@ export function buildMergePlan(
     retainedId: d.retainedId,
   }));
 
-  const protectedSet = protectedHeaders(schema);
+  const neverFill = neverFillHeaders(schema);
   const warnings = new Set<Warning>();
   const fills: MergeFill[] = [];
   const conflicts: MergeConflict[] = [];
 
   // §22.5 automatic proposal, per retained target and eligible header.
+  // Blank fields on the kept row (including name/DOB) are filled from deleted
+  // rows so apply never drops information that only lived on a duplicate.
   for (const retainedId of decision.retainedIds) {
     const target = byId.get(retainedId);
     if (!target) continue;
@@ -164,7 +158,7 @@ export function buildMergePlan(
     if (sources.length === 0) continue;
 
     schema.headers.forEach((header, columnIndex) => {
-      if (protectedSet.has(header)) return;
+      if (neverFill.has(header)) return;
 
       // §22.4 a formula target is never blank, so it is never a fill site.
       if (isFormula(target, columnIndex)) {

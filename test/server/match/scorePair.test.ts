@@ -55,8 +55,8 @@ function rec(id: string, f: Fields): RecordSnapshot {
 
 describe("scorePair acceptance matrix", () => {
   it("AT-01 exact duplicate -> HIGH", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118", address: "1 Main St" });
-    const b = rec("2", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118", address: "1 Main St" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118", address: "1 Main St" });
+    const b = rec("2", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118", address: "1 Main St" });
     const s = scorePair(a, b, cfg);
     expect(s.confidence).toBe("HIGH");
     expect(s.reasons).toContain("EXACT_NAME");
@@ -64,8 +64,8 @@ describe("scorePair acceptance matrix", () => {
   });
 
   it("AT-02 first/last swapped + matching DOB -> HIGH or MEDIUM with FIRST_LAST_REVERSED", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990" });
-    const b = rec("2", { first: "Public", last: "John", dob: "1/1/1990" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990" });
+    const b = rec("2", { first: "Public", last: "John", dob: "1/15/1990" });
     const s = scorePair(a, b, cfg);
     expect(["HIGH", "MEDIUM"]).toContain(s.confidence);
     expect(s.reasons).toContain("FIRST_LAST_REVERSED");
@@ -79,8 +79,8 @@ describe("scorePair acceptance matrix", () => {
   });
 
   it("AT-04 missing middle stays strong and flags MIDDLE_NAME_MISSING", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990" });
-    const b = rec("2", { first: "John", middle: "Quincy", last: "Public", dob: "1/1/1990" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990" });
+    const b = rec("2", { first: "John", middle: "Quincy", last: "Public", dob: "1/15/1990" });
     const s = scorePair(a, b, cfg);
     expect(s.confidence).toBe("HIGH");
     expect(s.reasons).toContain("MIDDLE_NAME_MISSING");
@@ -129,7 +129,7 @@ describe("scorePair acceptance matrix", () => {
   });
 
   it("AT-08 conflicting valid DOBs (strong name + same ZIP) -> LOW + CONFLICTING_VALID_DOB", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118" });
     const b = rec("2", { first: "John", last: "Public", dob: "6/6/1992", zip: "02118" });
     const s = scorePair(a, b, cfg);
     expect(s.confidence).toBe("LOW");
@@ -152,9 +152,257 @@ describe("scorePair acceptance matrix", () => {
     expect(s.eligible).toBe(false);
   });
 
+  it("same household, different given names, placeholder DOB -> LOW + SAME_HOUSEHOLD_ONLY", () => {
+    const a = rec("1", {
+      first: "Nahida",
+      last: "Ahmadi",
+      dob: "01/01/1900",
+      address: "11606 Fortune Ave",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Madina",
+      last: "Ahmadi",
+      dob: "01/01/1900",
+      address: "11606 Fortune Ave",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(s.confidence).toBe("LOW");
+    expect(s.warnings).toContain("SAME_HOUSEHOLD_ONLY");
+    expect(s.warnings).toContain("PLACEHOLDER_DOB");
+  });
+
+  it("shared January-1 sentinel DOB does not create EXACT_DOB identity", () => {
+    const a = rec("1", {
+      first: "Amisi",
+      last: "William",
+      dob: "01/01/1978",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const b = rec("2", {
+      first: "Eliza",
+      last: "Amuri",
+      dob: "01/01/1978",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(s.flags.dobExact).toBe(false);
+    expect(s.components.dobPoints).toBe(0);
+    expect(s.warnings).toContain("PLACEHOLDER_DOB");
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("Mohamed/Mohammad with different lasts stay out of HIGH/MEDIUM", () => {
+    const a = rec("1", {
+      first: "Mohamed",
+      last: "Mohamed",
+      dob: "01/01/1900",
+      address: "3316 W 111th St",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Mohammad",
+      last: "Mohammadi",
+      dob: "07/25/2009",
+      address: "2086 W 89",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("Abdul* household variants at one address are LOW without matching DOB", () => {
+    const a = rec("1", {
+      first: "Abdul Wahid",
+      last: "Ibrahimi",
+      dob: "01/01/1978",
+      address: "9235 North Church Drive",
+      city: "Parma Heights",
+      state: "OH",
+      zip: "44130",
+    });
+    const b = rec("2", {
+      first: "Abdul Wodod",
+      last: "Ibrahimi",
+      dob: "06/01/2005",
+      address: "9235 North Church Drive",
+      city: "Parma Heights",
+      state: "OH",
+      zip: "44130",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("shared real DOB with unrelated names is not MEDIUM/HIGH", () => {
+    const a = rec("1", {
+      first: "Penina",
+      last: "Faraja",
+      dob: "01/05/2010",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const b = rec("2", {
+      first: "Ketia",
+      last: "Chikura",
+      dob: "01/05/2010",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("weak Amisa/Amina-style MEDIUM links across different lasts are capped", () => {
+    const a = rec("1", {
+      first: "Amisa",
+      last: "Mfawume",
+      address: "3780 West 130th Street",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Amina",
+      last: "Unknown",
+      dob: "01/01/1900",
+      address: "3262 West 129th Street",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("Ali Mohammad Ali vs Ali Ahmad Ali at related addresses stay out of core bands", () => {
+    const a = rec("1", {
+      first: "Ali Mohammad",
+      last: "Ali",
+      dob: "01/01/1900",
+      address: "3371 West 119th Street",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Ali Ahmad",
+      last: "Ali",
+      dob: "03/31/2005",
+      address: "3371 West 119th Street",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("blank last name cannot hub-merge Mohamed variants", () => {
+    const a = rec("1", {
+      first: "Mohamed",
+      last: "Mohamed",
+      dob: "01/01/1900",
+      address: "3316 W 111th St",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Mohamad",
+      last: "Unknown",
+      dob: "01/01/1900",
+      address: "3262 West 129th Street",
+      city: "Cleveland",
+      state: "OH",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(["LOW", "EXCLUDED"]).toContain(s.confidence);
+  });
+
+  it("shared birthday with unrelated name is not eligible (Alina vs Hadji case)", () => {
+    const a = rec("1", {
+      first: "Alina",
+      last: "Mykhailytsia",
+      dob: "04/15/2006",
+      address: "3710 Oak Park Avenue",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44109",
+    });
+    const b = rec("2", {
+      first: "Hadji",
+      last: "Rama",
+      dob: "04/15/2006",
+      address: "6516 Clark Avenue",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44102",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(s.eligible).toBe(false);
+    expect(s.confidence).toBe("EXCLUDED");
+  });
+
+  it("true first/last reversal with matching DOB stays HIGH", () => {
+    const a = rec("1", {
+      first: "Hadji",
+      last: "Rama",
+      dob: "04/15/2006",
+      address: "6516 Clark Avenue",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44102",
+    });
+    const b = rec("2", {
+      first: "Rama",
+      last: "Hadji",
+      dob: "04/15/2006",
+      address: "6516 Clark Ave",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44102",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(s.confidence).toBe("HIGH");
+    expect(s.reasons).toContain("FIRST_LAST_REVERSED");
+  });
+
+  it("same household, same given name, placeholder DOB -> still HIGH (AT-07 shape)", () => {
+    const a = rec("1", {
+      first: "Madina",
+      last: "Ahmadi",
+      dob: "01/01/1900",
+      address: "11606 Fortune Ave",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const b = rec("2", {
+      first: "Madina",
+      last: "Ahmadi",
+      dob: "01/01/1900",
+      address: "11606 Fortune Ave",
+      city: "Cleveland",
+      state: "OH",
+      zip: "44111",
+    });
+    const s = scorePair(a, b, cfg);
+    expect(s.confidence).toBe("HIGH");
+  });
+
   it("AT-11 same person moved (name + DOB match, ZIP/address differ) -> eligible", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118", address: "1 Main St" });
-    const b = rec("2", { first: "John", last: "Public", dob: "1/1/1990", zip: "99001", address: "5 Oak Ave" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118", address: "1 Main St" });
+    const b = rec("2", { first: "John", last: "Public", dob: "1/15/1990", zip: "99001", address: "5 Oak Ave" });
     const s = scorePair(a, b, cfg);
     expect(s.eligible).toBe(true);
     expect(s.confidence).not.toBe("EXCLUDED");
@@ -162,8 +410,8 @@ describe("scorePair acceptance matrix", () => {
   });
 
   it("produces sorted, de-duplicated reason and warning arrays", () => {
-    const a = rec("1", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118" });
-    const b = rec("2", { first: "John", last: "Public", dob: "1/1/1990", zip: "02118" });
+    const a = rec("1", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118" });
+    const b = rec("2", { first: "John", last: "Public", dob: "1/15/1990", zip: "02118" });
     const s = scorePair(a, b, cfg);
     expect(s.reasons).toEqual([...new Set(s.reasons)].sort());
     expect(s.warnings).toEqual([...new Set(s.warnings)].sort());
