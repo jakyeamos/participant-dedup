@@ -12,7 +12,7 @@ function run(args: string[], cwd: string, env: NodeJS.ProcessEnv = {}): {
   stderr: string;
   stdout: string;
 } {
-  const result = spawnSync("pnpm", ["exec", "tsx", cli, ...args], {
+  const result = spawnSync("node", ["--import", "tsx", cli, ...args], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, ...env },
