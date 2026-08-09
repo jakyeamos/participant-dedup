@@ -1,0 +1,207 @@
+{
+  "schema": "mac-control-task-manifest/v1",
+  "repository_id": "repo-f543c5c862892ebc",
+  "repository_name": "participant-dedup",
+  "applicability": "applicable",
+  "applicability_reason": "participant-dedup exposes runnable Apps Script/sidebar UI; this manifest records its supported user-facing workflow catalog while live and measured evidence remain outstanding.",
+  "app": {
+    "name": "Participant Deduplication sidebar"
+  },
+  "criteria": {
+    "stable_identity": true,
+    "correct_semantics": true,
+    "observable_state": true,
+    "useful_hierarchy": true,
+    "efficient_navigation": true,
+    "verifiable_outcomes": true,
+    "route_flexibility": true,
+    "stable_change_behavior": true
+  },
+  "tasks": [
+    {
+      "task_id": "scan-active-sheet",
+      "stable_target_id": "participant-dedup.menu.scan",
+      "hierarchy": "participant-dedup > menu > scan",
+      "semantic_action": "press Scan Active Sheet",
+      "observable_postcondition": "Scan status, batch identity, and duplicate count are readable",
+      "observable_states": [
+        "enabled",
+        "focused",
+        "selected",
+        "expanded",
+        "visible",
+        "loading",
+        "completed"
+      ],
+      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
+      "eligible_routes": [
+        "accessibility",
+        "keyboard",
+        "scrolling"
+      ],
+      "selected_route": "accessibility",
+      "change_states": [
+        "loading",
+        "modal",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "accessibility": {
+        "identifier": "participant-dedup.menu.scan",
+        "label": "Scan Active Sheet",
+        "role": "AXButton",
+        "required_actions": [
+          "AXPress"
+        ]
+      }
+    },
+    {
+      "task_id": "review-dedup-queue",
+      "stable_target_id": "participant-dedup.queue.review",
+      "hierarchy": "participant-dedup > queue > review",
+      "semantic_action": "open Review Sidebar",
+      "observable_postcondition": "Duplicate queue, filters, and decision controls are readable",
+      "observable_states": [
+        "enabled",
+        "focused",
+        "selected",
+        "expanded",
+        "visible",
+        "loading",
+        "completed"
+      ],
+      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
+      "eligible_routes": [
+        "accessibility",
+        "keyboard",
+        "scrolling"
+      ],
+      "selected_route": "accessibility",
+      "change_states": [
+        "loading",
+        "modal",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "accessibility": {
+        "identifier": "participant-dedup.queue.review",
+        "label": "Open Review Sidebar",
+        "role": "AXButton",
+        "required_actions": [
+          "AXPress"
+        ]
+      }
+    },
+    {
+      "task_id": "configure-queue-filters",
+      "stable_target_id": "participant-dedup.queue.filters",
+      "hierarchy": "participant-dedup > queue > filters",
+      "semantic_action": "set queue filters",
+      "observable_postcondition": "Selected filters and resulting batch are readable",
+      "observable_states": [
+        "enabled",
+        "focused",
+        "selected",
+        "expanded",
+        "visible",
+        "loading",
+        "completed"
+      ],
+      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
+      "eligible_routes": [
+        "accessibility",
+        "keyboard",
+        "scrolling"
+      ],
+      "selected_route": "accessibility",
+      "change_states": [
+        "loading",
+        "modal",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "accessibility": {
+        "identifier": "participant-dedup.queue.filters",
+        "label": "Queue Filters",
+        "role": "AXGroup",
+        "required_actions": [
+          "AXFocus"
+        ]
+      }
+    },
+    {
+      "task_id": "apply-reviewed-decisions",
+      "stable_target_id": "participant-dedup.queue.apply",
+      "hierarchy": "participant-dedup > queue > apply",
+      "semantic_action": "press Apply Reviewed Decisions",
+      "observable_postcondition": "Applied count, unchanged count, and errors are readable",
+      "observable_states": [
+        "enabled",
+        "focused",
+        "selected",
+        "expanded",
+        "visible",
+        "loading",
+        "completed"
+      ],
+      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
+      "eligible_routes": [
+        "accessibility",
+        "keyboard",
+        "scrolling"
+      ],
+      "selected_route": "accessibility",
+      "change_states": [
+        "loading",
+        "modal",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "accessibility": {
+        "identifier": "participant-dedup.queue.apply",
+        "label": "Apply Reviewed Decisions",
+        "role": "AXButton",
+        "required_actions": [
+          "AXPress"
+        ]
+      }
+    },
+    {
+      "task_id": "view-change-history",
+      "stable_target_id": "participant-dedup.history",
+      "hierarchy": "participant-dedup > history",
+      "semantic_action": "open View Change History",
+      "observable_postcondition": "Change-history records and empty state are readable",
+      "observable_states": [
+        "enabled",
+        "focused",
+        "selected",
+        "expanded",
+        "visible",
+        "loading",
+        "completed"
+      ],
+      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
+      "eligible_routes": [
+        "accessibility",
+        "keyboard",
+        "scrolling"
+      ],
+      "selected_route": "accessibility",
+      "change_states": [
+        "loading",
+        "modal",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "accessibility": {
+        "identifier": "participant-dedup.history",
+        "label": "View Change History",
+        "role": "AXButton",
+        "required_actions": [
+          "AXPress"
+        ]
+      }
+    }
+  ]
+}

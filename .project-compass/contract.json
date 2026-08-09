@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "revision": 1,
+  "project": {
+    "name": "participant-dedup",
+    "identity": "A Google Sheets review tool that finds likely duplicate participant rows, explains the match, and applies reviewer-approved deletions atomically on a copy with an audit trail.",
+    "audience": "Operators cleaning participant sheets who need reviewer control and recoverable audit evidence rather than silent fuzzy deletion.",
+    "core_loop": "Read a copied sheet, detect likely duplicate rows, present evidence for review, apply only approved changes atomically, and retain the audit record for reconciliation.",
+    "north_star": "Duplicate participant rows are removed with high-confidence evidence and human review while the source data remains protected and recoverable.",
+    "not_this": ["An automatic deletion bot against source data", "A participant identity authority", "A fuzzy match that hides ambiguity or stores participant data in the repository"]
+  },
+  "targets": {
+    "mvp": {"definition": "A copied Google Sheet can be scanned for likely duplicates, reviewed, and updated with an atomic, auditable operation."},
+    "complete_product": {"definition": "The tool reliably supports bounded duplicate review, configurable matching evidence, safe copy-based application, audit reconciliation, and operator recovery for supported sheets."}
+  },
+  "pillars": [
+    {"id": "reviewable-deduplication", "name": "Reviewable deduplication", "outcomes": [{"id": "evidence-before-delete", "name": "Likely duplicate pairs are presented with match evidence and remain pending until a reviewer decides.", "targets": ["mvp", "complete_product"], "maturity": 50, "confidence": "medium", "layers": {"intended": "The operator decides whether a fuzzy match is a duplicate.", "planned": "The README defines a reviewer-first duplicate workflow.", "implemented": "The Apps Script tool detects likely duplicates and supports reviewer-approved application.", "verified": "Repository documentation supports the workflow; no live sheet UAT was run here."}, "evidence": [{"ref": "README.md", "note": "Defines fuzzy detection, reviewer decision, and atomic audit behavior.", "observed_at": "2026-08-02T13:25:04Z"}], "blockers": [{"kind": "external", "summary": "Live Google Sheets authorization, representative data, and operator UAT are required to verify matching and recovery behavior."}]}]},
+    {"id": "protected-application", "name": "Protected application", "outcomes": [{"id": "copy-only-audit", "name": "Approved changes apply atomically to a copy and leave an audit trail without persisting participant data in the repository.", "targets": ["complete_product"], "maturity": 50, "confidence": "medium", "layers": {"intended": "The source sheet and participant privacy remain protected during cleanup.", "planned": "Copy-only operation and audit requirements are explicit.", "implemented": "The repository contains the documented Apps Script application path.", "verified": "No live operation or audit reconciliation was executed in this bootstrap."}, "evidence": [{"ref": "README.md", "note": "Documents copy-only application and no participant data in the repository.", "observed_at": "2026-08-02T13:25:04Z"}], "blockers": [{"kind": "external", "summary": "A live copy-based run is needed to verify atomicity, audit completeness, and rollback expectations."}]}]}
+  ],
+  "source_layers": {"intended": [{"ref": "README.md", "note": "Product identity and privacy boundary.", "observed_at": "2026-08-02T13:25:04Z"}], "planned": [{"ref": "README.md", "note": "Reviewer-first and copy-only workflow.", "observed_at": "2026-08-02T13:25:04Z"}], "implemented": [{"ref": "README.md", "note": "Current Apps Script surface.", "observed_at": "2026-08-02T13:25:04Z"}], "verified": [{"ref": "README.md", "note": "Documented claims only; no live sheet UAT was performed.", "observed_at": "2026-08-02T13:25:04Z"}]},
+  "drift": [{"kind": "verification-gap", "summary": "The review and copy-only safety outcome is documented but blocked on authenticated live-sheet UAT with representative data and audit reconciliation.", "status": "open", "observed_at": "2026-08-02T13:25:04Z", "evidence": [{"ref": "README.md", "note": "Defines the required external UAT boundary.", "observed_at": "2026-08-02T13:25:04Z"}]}],
+  "updated_at": "2026-08-02T13:25:04Z"
+}
