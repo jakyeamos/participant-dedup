@@ -21,12 +21,19 @@ import { clustersRepository } from "@/server/clustersRepository";
 import { getQueuePage } from "@/server/review/queue";
 import { getClusterDetail } from "@/server/review/clusterDetail";
 import { saveClusterDecision } from "@/server/review/decisions";
+import {
+  buildMergeDecisionForKeeper,
+  buildRichestMergeDecision,
+  type RichestMergeResult,
+} from "@/server/review/autoSelect";
+import { clusterFromRow } from "@/server/review/clusterRow";
 import { getBatchSummary } from "@/server/review/summary";
+import { recordsRepository } from "@/server/recordsRepository";
 import { createApplyChallenge } from "@/server/apply/preflight";
 import { applyDecisions } from "@/server/apply/applyDecisions";
 import { SYSTEM_SHEETS } from "@/shared/constants";
 import type { Confidence } from "@/shared/constants";
-import type { ClusterDecision } from "@/server/types";
+import type { ClusterDecision, SourceSchema } from "@/server/types";
 import type { FakeSheetsGateway } from "@/server/sheets/FakeSheetsGateway";
 import type { DedupConfig } from "@/shared/config";
 import {
@@ -426,40 +433,51 @@ async function cmdAutoReview(args: Args): Promise<void> {
   ).toUpperCase() as Confidence;
   const batchId = resolveBatch(session.gateway, args);
 
-  const queue = getQueuePage(
-    session.gateway,
-    {
-      batchId,
-      confidence: [band],
-      statuses: ["UNREVIEWED", "IN_PROGRESS"],
-      pageSize: 500,
-    },
-    cfg,
-  );
-
   let saved = 0;
-  for (const item of queue.items) {
-    const detail = getClusterDetail(session.gateway, batchId, item.clusterId, cfg);
-    if (detail.records.length < 2) continue;
-    const retained = detail.records[0]!.dedupId;
-    const deleted = detail.records.slice(1).map((r) => r.dedupId);
-    const decision: ClusterDecision = {
-      batchId,
-      clusterId: item.clusterId,
-      expectedRevision: detail.revision,
-      mode: "SELECT_RECORDS",
-      retainedIds: [retained],
-      deleteAssignments: Object.fromEntries(deleted.map((id) => [id, retained])),
-      fieldChoices: {},
-      notes: `dedup-cli auto-review keep-first (${band})`,
-    };
-    saveClusterDecision(session.gateway, decision, cfg);
-    saved += 1;
+  let fills = 0;
+  let skipped = 0;
+
+  // Queue pages are capped by config (default 20). Re-fetch from the top after
+  // each page because saves remove items from UNREVIEWED.
+  for (;;) {
+    const queue = getQueuePage(
+      session.gateway,
+      {
+        batchId,
+        confidence: [band],
+        statuses: ["UNREVIEWED", "IN_PROGRESS"],
+        pageSize: 500,
+      },
+      cfg,
+    );
+    if (queue.items.length === 0) break;
+
+    let pageSaved = 0;
+    for (const item of queue.items) {
+      const detail = getClusterDetail(session.gateway, batchId, item.clusterId, cfg);
+      const result = planRichestMerge(
+        session,
+        batchId,
+        detail,
+        cfg,
+        `dedup-cli auto-review (${band})`,
+      );
+      if (!result) {
+        skipped += 1;
+        continue;
+      }
+      saveClusterDecision(session.gateway, result.decision, cfg);
+      saved += 1;
+      fills += result.fillCount;
+      pageSaved += 1;
+    }
+    // Remaining items could not be planned (e.g. <2 core members) — stop.
+    if (pageSaved === 0) break;
   }
 
   await session.persist();
   process.stdout.write(
-    `auto-review: saved ${saved} ${band} cluster(s) → ${session.label}\n`,
+    `auto-review: saved ${saved} ${band} cluster(s), merged ~${fills} blank field(s), skipped ${skipped} → ${session.label}\n`,
   );
 }
 
@@ -504,7 +522,114 @@ function formatRecordCard(
     .map((h, i) => `${h}=${rec.values[i] ?? ""}`)
     .filter((line) => !line.endsWith("="))
     .slice(0, 6);
-  return `${index + 1}. ${rec.label} (row ${rec.sourceRow})  ${bits.join(" · ")}`;
+  const role = rec.role === "SUGGESTED" ? " [SUGGESTED — weak link, not a core match]" : "";
+  return `${index + 1}. ${rec.label} (row ${rec.sourceRow})${role}  ${bits.join(" · ")}`;
+}
+
+function recordById(
+  detail: ReturnType<typeof getClusterDetail>,
+  id: string,
+): ReturnType<typeof getClusterDetail>["records"][number] | undefined {
+  return detail.records.find((r) => r.dedupId === id);
+}
+
+function headerValue(
+  detail: ReturnType<typeof getClusterDetail>,
+  rec: ReturnType<typeof getClusterDetail>["records"][number],
+  header: string,
+): string {
+  const i = detail.headers.indexOf(header);
+  return i >= 0 ? String(rec.values[i] ?? "") : "";
+}
+
+function formatDifferingFields(detail: ReturnType<typeof getClusterDetail>): string {
+  if (detail.differingHeaders.length === 0) return "fields agree across members";
+  const lines = detail.differingHeaders.slice(0, 12).map((header) => {
+    const parts = detail.records.map((rec, i) => {
+      const v = headerValue(detail, rec, header).trim() || "(blank)";
+      return `#${i + 1}=${v}`;
+    });
+    return `  ${header}: ${parts.join(" | ")}`;
+  });
+  const more =
+    detail.differingHeaders.length > 12
+      ? `\n  … +${detail.differingHeaders.length - 12} more`
+      : "";
+  return `differing fields:\n${lines.join("\n")}${more}`;
+}
+
+function coreIdsOf(detail: ReturnType<typeof getClusterDetail>): string[] {
+  return detail.records.filter((r) => r.role === "CORE").map((r) => r.dedupId);
+}
+
+function planRichestMerge(
+  session: Session,
+  batchId: string,
+  detail: ReturnType<typeof getClusterDetail>,
+  cfg: DedupConfig,
+  notes: string,
+): RichestMergeResult | null {
+  const batch = batchesRepository(session.gateway).get(batchId);
+  if (!batch) throw new Error("batch missing");
+  const schema = batch.schema as unknown as SourceSchema;
+  const clusterRow = clustersRepository(session.gateway).get(detail.clusterId);
+  if (!clusterRow) throw new Error("cluster missing");
+  const cluster = clusterFromRow(clusterRow);
+  const snapshots = recordsRepository(session.gateway).readByBatch(batchId, schema.headers);
+  return buildRichestMergeDecision({
+    batchId,
+    cluster,
+    expectedRevision: detail.revision,
+    coreIds: coreIdsOf(detail),
+    records: snapshots,
+    schema,
+    cfg,
+    notes,
+  });
+}
+
+function planMergeForKeeper(
+  session: Session,
+  batchId: string,
+  detail: ReturnType<typeof getClusterDetail>,
+  retainedId: string,
+  cfg: DedupConfig,
+  notes: string,
+): RichestMergeResult | null {
+  const batch = batchesRepository(session.gateway).get(batchId);
+  if (!batch) throw new Error("batch missing");
+  const schema = batch.schema as unknown as SourceSchema;
+  const clusterRow = clustersRepository(session.gateway).get(detail.clusterId);
+  if (!clusterRow) throw new Error("cluster missing");
+  const cluster = clusterFromRow(clusterRow);
+  const snapshots = recordsRepository(session.gateway).readByBatch(batchId, schema.headers);
+  const deletedIds = coreIdsOf(detail).filter((id) => id !== retainedId);
+  return buildMergeDecisionForKeeper({
+    batchId,
+    cluster,
+    expectedRevision: detail.revision,
+    retainedId,
+    deletedIds,
+    records: snapshots,
+    schema,
+    cfg,
+    notes,
+  });
+}
+
+function describeMerge(detail: ReturnType<typeof getClusterDetail>, result: RichestMergeResult): string {
+  const kept = recordById(detail, result.retainedId);
+  const deletedRows = result.deletedIds
+    .map((id) => recordById(detail, id)?.sourceRow ?? "?")
+    .join(", ");
+  return [
+    `Keep row ${kept?.sourceRow ?? "?"} (${kept?.label ?? result.retainedId}) — info score ${result.retainedScore}`,
+    `Delete row(s) ${deletedRows}`,
+    `Merge ${result.fillCount} blank field(s)` +
+      (result.conflictResolutions > 0
+        ? ` · auto-picked ${result.conflictResolutions} conflict(s) (longer value)`
+        : ""),
+  ].join("\n");
 }
 
 async function cmdReview(args: Args): Promise<void> {
@@ -537,12 +662,20 @@ async function cmdReview(args: Args): Promise<void> {
     );
 
     const choice = await p.select({
-      message: "Pick a cluster",
+      message: "Pick a cluster (or auto-resolve all)",
       options: [
+        {
+          value: "__auto_all__",
+          label: "Auto-resolve all waiting clusters",
+          hint: "keep richest row + merge blanks on each",
+        },
         ...queue.items.map((item) => ({
           value: item.clusterId,
           label: `${item.confidence} ${item.score.toFixed(0)}  ${item.label}`,
-          hint: `${item.memberCount} records · row ${item.firstSourceRow}`,
+          hint:
+            item.suggestedCount > 0
+              ? `${item.memberCount - item.suggestedCount} core + ${item.suggestedCount} suggested · row ${item.firstSourceRow}`
+              : `${item.memberCount} records · row ${item.firstSourceRow}`,
         })),
         { value: "__done__", label: "Done reviewing", hint: "save & maybe apply" },
       ],
@@ -550,21 +683,60 @@ async function cmdReview(args: Args): Promise<void> {
 
     if (p.isCancel(choice) || choice === "__done__") break;
 
+    if (choice === "__auto_all__") {
+      let batchSaved = 0;
+      let batchFills = 0;
+      let batchSkipped = 0;
+      for (const item of queue.items) {
+        const d = getClusterDetail(session.gateway, batchId, item.clusterId, cfg);
+        const result = planRichestMerge(
+          session,
+          batchId,
+          d,
+          cfg,
+          "dedup-cli review TUI auto-all",
+        );
+        if (!result) {
+          batchSkipped += 1;
+          continue;
+        }
+        saveClusterDecision(session.gateway, result.decision, cfg);
+        batchSaved += 1;
+        batchFills += result.fillCount;
+      }
+      saved += batchSaved;
+      p.log.success(
+        `Auto-resolved ${batchSaved} cluster(s), ~${batchFills} field merge(s), skipped ${batchSkipped}`,
+      );
+      continue;
+    }
+
     const detail = getClusterDetail(session.gateway, batchId, String(choice), cfg);
+    const preview = planRichestMerge(session, batchId, detail, cfg, "dedup-cli review TUI");
     const body = [
       `${detail.confidence} score=${detail.score.toFixed(2)} revision=${detail.revision}`,
       ...detail.records.map((_, i) => formatRecordCard(detail, i)),
-      detail.differingHeaders.length
-        ? `differing: ${detail.differingHeaders.join(", ")}`
-        : "fields agree across members",
+      formatDifferingFields(detail),
+      preview ? `\nSuggested:\n${describeMerge(detail, preview)}` : "\n(no auto-merge available)",
     ].join("\n");
     p.note(body, detail.records[0]?.label ?? detail.clusterId.slice(0, 8));
 
     const action = await p.select({
       message: "Decision",
       options: [
-        { value: "keep-first", label: "Keep first record, delete the rest" },
-        { value: "keep-pick", label: "Pick which record to keep" },
+        {
+          value: "auto",
+          label: "Accept: keep richest + merge blanks",
+          hint: "recommended — never drops info from deleted rows",
+        },
+        {
+          value: "keep-pick",
+          label: "Pick which core to keep (still merges blanks)",
+        },
+        {
+          value: "keep-all",
+          label: "Keep all (not duplicates — no deletes)",
+        },
         { value: "skip", label: "Skip (leave unreviewed)" },
         { value: "quit", label: "Quit review" },
       ],
@@ -573,40 +745,64 @@ async function cmdReview(args: Args): Promise<void> {
     if (p.isCancel(action) || action === "quit") break;
     if (action === "skip") continue;
 
-    let keepIndex = 0;
-    if (action === "keep-pick") {
-      const picked = await p.select({
-        message: "Keep which record?",
-        options: detail.records.map((rec, i) => ({
-          value: String(i),
-          label: `${i + 1}. ${rec.label}`,
-          hint: `row ${rec.sourceRow}`,
-        })),
-      });
-      if (p.isCancel(picked)) break;
-      keepIndex = Number(picked);
-    }
-
-    if (detail.records.length < 2) {
-      p.log.warn("Cluster has fewer than 2 records — skipped");
+    if (action === "keep-all") {
+      const decision: ClusterDecision = {
+        batchId,
+        clusterId: detail.clusterId,
+        expectedRevision: detail.revision,
+        mode: "KEEP_ALL",
+        retainedIds: detail.records.map((r) => r.dedupId),
+        deleteAssignments: {},
+        fieldChoices: {},
+        notes: "dedup-cli review TUI",
+        fallbackReviewerName: "cli",
+      };
+      saveClusterDecision(session.gateway, decision, cfg);
+      saved += 1;
+      p.log.success("Saved — keep all (no deletes)");
       continue;
     }
 
-    const retained = detail.records[keepIndex]!.dedupId;
-    const deleted = detail.records.filter((_, i) => i !== keepIndex).map((r) => r.dedupId);
-    const decision: ClusterDecision = {
-      batchId,
-      clusterId: detail.clusterId,
-      expectedRevision: detail.revision,
-      mode: "SELECT_RECORDS",
-      retainedIds: [retained],
-      deleteAssignments: Object.fromEntries(deleted.map((id) => [id, retained])),
-      fieldChoices: {},
-      notes: "dedup-cli review TUI",
-    };
-    saveClusterDecision(session.gateway, decision, cfg);
+    const cores = coreIdsOf(detail);
+    if (cores.length < 2) {
+      p.log.warn("Fewer than 2 core records — suggested-only links are not applied; skipped");
+      continue;
+    }
+
+    let result: RichestMergeResult | null = null;
+    if (action === "auto") {
+      result = preview;
+    } else if (action === "keep-pick") {
+      const picked = await p.select({
+        message: "Keep which core record?",
+        options: detail.records
+          .map((rec, i) => ({ rec, i }))
+          .filter(({ rec }) => rec.role === "CORE")
+          .map(({ rec, i }) => ({
+            value: rec.dedupId,
+            label: `${i + 1}. ${rec.label}`,
+            hint: `row ${rec.sourceRow}`,
+          })),
+      });
+      if (p.isCancel(picked)) break;
+      result = planMergeForKeeper(
+        session,
+        batchId,
+        detail,
+        String(picked),
+        cfg,
+        "dedup-cli review TUI",
+      );
+    }
+
+    if (!result) {
+      p.log.warn("Could not build merge plan — skipped");
+      continue;
+    }
+
+    saveClusterDecision(session.gateway, result.decision, cfg);
     saved += 1;
-    p.log.success(`Saved — keep ${retained}, delete ${deleted.length}`);
+    p.log.success(describeMerge(detail, result).replace(/\n/g, " · "));
   }
 
   await session.persist();

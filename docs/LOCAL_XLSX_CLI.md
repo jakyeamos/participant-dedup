@@ -43,8 +43,9 @@ pnpm dedup apply --backend sheets --spreadsheet SPREADSHEET_ID --confirm
 
 1. Pick a cluster from the list
 2. Inspect member rows
-3. Keep first, pick which to keep, skip, or quit
-4. Optionally apply deletions when finished
+3. Accept the suggested richest-row merge, pick a core row, keep all, skip, or quit
+4. Use **Auto-resolve all waiting clusters** to apply the same information-preserving plan to the current queue
+5. Optionally apply deletions when finished
 
 ## Single binary
 
@@ -65,3 +66,4 @@ bun build ./tools/dedupCli.ts --compile --minify --target=bun-windows-x64 --outf
 
 - Headers use the same aliases as the Sheets add-on.
 - Hosted API (`docs/BACKEND.md`) remains optional for the in-spreadsheet sidebar.
+- CLI integration tests exercise `tools/dedupCli.ts` across a process boundary. Vitest's in-process V8 report cannot attribute that child-process execution, so the entrypoint is explicitly excluded from changed-line coverage; the review planner and decision logic remain covered by unit tests.
