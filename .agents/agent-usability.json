@@ -1,0 +1,8 @@
+{
+  "schema": "agent-usability/v1",
+  "reviewed_at": "2026-08-09",
+  "applicability": "not_applicable",
+  "reason": "No repository-owned agent-facing tool or hosted skill surface was found; ordinary developer commands remain covered by repository quality maturity.",
+  "tools": [],
+  "skills": []
+}
