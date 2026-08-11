@@ -6,6 +6,15 @@ audit trail. Matching runs on an owned Railway backend for large sheets; review 
 inside the spreadsheet sidebar. No third-party matching APIs, no remote sidebar
 assets, and no participant data in the repository.
 
+## Quality evidence checkpoint
+
+Last reviewed: 2026-08-11.
+
+The repository instructions, completion checks, and executable quality commands
+were reviewed on this date. This checkpoint keeps the evidence current; it
+does not claim that every check passes. Re-run the documented checks and the
+fleet audit when these contracts or the target branch changes.
+
 ## Requirements
 
 - Node.js 20+
