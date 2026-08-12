@@ -3,6 +3,7 @@ import { renderQueue, renderQueueFilters, readQueueFilters, renderFilterSettings
 import { readDecision, renderClusterReview } from "@/client/views/cluster";
 import {
   renderError,
+  renderBootstrap,
   renderIdentityRequired,
   renderLoading,
   renderScanProgress,
@@ -169,6 +170,78 @@ describe("loading state", () => {
     expect(view.getAttribute("data-view")).toBe("LOADING");
     expect(view.textContent).toContain("Opening…");
     expect(view.querySelector(".dd-progress-indeterminate")).not.toBeNull();
+  });
+});
+
+describe("Mac Control semantic task surface", () => {
+  it("publishes one stable scan target with native button semantics", () => {
+    const view = renderBootstrap(
+      { activeSheetName: "Participants", identityDisplay: "Reviewer One" },
+      { onStartScan: vi.fn(), onOpenHistory: vi.fn() },
+    );
+    const target = view.querySelector<HTMLButtonElement>(
+      '[data-mac-control-id="participant-dedup.menu.scan"]',
+    );
+
+    expect(target?.tagName).toBe("BUTTON");
+    expect(target?.textContent).toBe("Scan active sheet");
+    expect(view.querySelectorAll('[data-mac-control-id="participant-dedup.menu.scan"]')).toHaveLength(1);
+    expect(view.getAttribute("role")).toBe("region");
+    expect(view.getAttribute("aria-labelledby")).toBe("view-bootstrap-heading");
+  });
+
+  it("exposes queue and filter state as machine-readable postconditions", () => {
+    const queue = renderQueue(
+      queuePage({ items: [queueItem()] }),
+      { confidence: ["HIGH"], statuses: ["UNREVIEWED"] },
+      noopQueueHandlers,
+    );
+    expect(queue.getAttribute("data-mac-control-id")).toBe("participant-dedup.queue.review");
+    expect(queue.getAttribute("data-task-state")).toBe("queue_ready");
+
+    const filters = renderFilterSettings(
+      { confidence: ["HIGH"], statuses: ["UNREVIEWED"] },
+      { onSave: vi.fn(), onBack: vi.fn() },
+    );
+    expect(filters.getAttribute("data-mac-control-id")).toBe("participant-dedup.queue.filters");
+    expect(filters.getAttribute("data-task-state")).toBe("filters_ready");
+    const medium = filters.querySelector<HTMLInputElement>(
+      'input[name="confidence"][value="MEDIUM"]',
+    )!;
+    medium.checked = true;
+    medium.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(filters.getAttribute("data-task-state")).toBe("filters_configured");
+  });
+
+  it("binds destructive apply to confirmation state and a specific result oracle", () => {
+    const confirmation = renderApplyConfirmation(challenge(), batchSummary(), "confirm", {
+      onApply: vi.fn(),
+      onBack: vi.fn(),
+    });
+    const target = confirmation.querySelector<HTMLButtonElement>(
+      '[data-mac-control-id="participant-dedup.queue.apply"]',
+    )!;
+    const field = confirmation.querySelector<HTMLInputElement>('[data-field="confirmation"]')!;
+
+    expect(target.disabled).toBe(true);
+    expect(confirmation.getAttribute("data-task-state")).toBe("confirmation_required");
+    field.value = "confirm";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(target.disabled).toBe(false);
+    expect(confirmation.getAttribute("data-task-state")).toBe("confirmation_ready");
+
+    const result = renderApplyResult(
+      { applyBatchId: "a1", deletedRows: 2, filledFields: 1, auditWritten: 6 },
+      { onDone: vi.fn() },
+    );
+    expect(result.getAttribute("data-task-state")).toBe("changes_applied");
+  });
+
+  it("exposes a stable history region and loaded-state oracle", () => {
+    const history = renderHistory(historyPage(), { onLoadMore: vi.fn() });
+    expect(history.getAttribute("data-mac-control-id")).toBe("participant-dedup.history");
+    expect(history.getAttribute("data-task-state")).toBe("history_loaded");
+    expect(history.getAttribute("role")).toBe("region");
   });
 });
 

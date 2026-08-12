@@ -1,7 +1,16 @@
 import type { QueueItem, QueuePage } from "@/server/review/queue";
 import type { ClusterStatus, Confidence } from "@/shared/constants";
 import { CLUSTER_STATUSES, CONFIDENCE_LEVELS } from "@/shared/constants";
-import { append, checkbox, checkedValues, el, button, humanize, view } from "@/client/dom";
+import {
+  append,
+  button,
+  checkbox,
+  checkedValues,
+  el,
+  humanize,
+  setTaskState,
+  view,
+} from "@/client/dom";
 
 /** §21.4 What the reviewer has narrowed the queue down to. */
 export interface QueueFilters {
@@ -77,6 +86,7 @@ export function renderFilterSettings(
   handlers: FilterHandlers,
 ): HTMLElement {
   const section = view("QUEUE_FILTERS", "Queue filters");
+  setTaskState(section, "filters_ready");
   append(
     section,
     el(
@@ -87,6 +97,9 @@ export function renderFilterSettings(
   );
 
   const form = renderQueueFilters(filters);
+  form.addEventListener("change", () => {
+    setTaskState(section, "filters_configured");
+  });
   append(section, form);
 
   append(
@@ -143,6 +156,7 @@ export function renderQueue(
   handlers: QueueHandlers,
 ): HTMLElement {
   const section = view("QUEUE", "Possible duplicates");
+  setTaskState(section, "queue_ready");
 
   const filterBar = el("div", "dd-filter-summary");
   append(filterBar, el("p", "dd-hint", `Showing: ${summarizeFilters(filters)}`));

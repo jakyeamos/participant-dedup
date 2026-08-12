@@ -1,6 +1,6 @@
 import type { CellValue } from "@/server/types";
 import type { HistoryEvent, HistoryPage } from "@/server/history";
-import { append, button, el, humanize, view } from "@/client/dom";
+import { append, button, el, humanize, setTaskState, view } from "@/client/dom";
 
 /**
  * §25 The change history. Every value on this screen came out of a participant
@@ -54,6 +54,7 @@ function eventRow(event: HistoryEvent): HTMLElement {
 
 export function renderHistory(page: HistoryPage, handlers: HistoryHandlers): HTMLElement {
   const section = view("AUDIT_HISTORY", "Change history");
+  setTaskState(section, "history_loaded");
   append(
     section,
     el("p", "dd-message", `Showing ${page.filteredCount} of ${page.totalCount} recorded changes.`),
