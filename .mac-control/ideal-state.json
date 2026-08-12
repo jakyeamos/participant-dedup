@@ -1,206 +1,1042 @@
 {
-  "schema": "mac-control-task-manifest/v1",
+  "schema": "mac-control-task-manifest/v4",
   "repository_id": "repo-f543c5c862892ebc",
   "repository_name": "participant-dedup",
   "applicability": "applicable",
-  "applicability_reason": "participant-dedup exposes runnable Apps Script/sidebar UI; this manifest records its supported user-facing workflow catalog while live and measured evidence remain outstanding.",
+  "applicability_reason": "The Apps Script sidebar exposes five bounded review workflows with stable DOM task identities and machine-readable task-state postconditions.",
   "app": {
     "name": "Participant Deduplication sidebar"
   },
-  "criteria": {
-    "stable_identity": true,
-    "correct_semantics": true,
-    "observable_state": true,
-    "useful_hierarchy": true,
-    "efficient_navigation": true,
-    "verifiable_outcomes": true,
-    "route_flexibility": true,
-    "stable_change_behavior": true
-  },
+  "criteria": {},
   "tasks": [
     {
+      "surface_kind": "web_content",
+      "focus_policy": "foreground",
+      "foreground_postcondition": "target_foreground",
+      "fallback_policy": "fresh_state_handoff",
+      "change_states": [
+        "loading",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "change_state_exemptions": {
+        "modal": "The sidebar does not use modal overlays; permission and failure states replace the active region."
+      },
+      "navigation_strategy": "direct_semantic",
+      "route_candidates": [
+        {
+          "id": "browser-dom",
+          "provider": "browser_connector",
+          "method": "adapter",
+          "interaction_mode": "semantic"
+        },
+        {
+          "id": "computer-pointer",
+          "provider": "computer_use",
+          "method": "pointer",
+          "interaction_mode": "pointer"
+        }
+      ],
+      "shortcut_acceleration": {
+        "disposition": "not_applicable",
+        "reason": "A container-bound Apps Script sidebar does not expose a stable app-managed shortcut or reversible shortcut customization surface."
+      },
       "task_id": "scan-active-sheet",
       "stable_target_id": "participant-dedup.menu.scan",
-      "hierarchy": "participant-dedup > menu > scan",
-      "semantic_action": "press Scan Active Sheet",
-      "observable_postcondition": "Scan status, batch identity, and duplicate count are readable",
+      "hierarchy": "participant-dedup.sidebar > bootstrap > scan-active-sheet button",
+      "semantic_action": "click",
+      "observable_postcondition": "data-task-state equals queue_ready",
       "observable_states": [
         "enabled",
         "focused",
-        "selected",
-        "expanded",
         "visible",
         "loading",
         "completed"
       ],
-      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
-      "eligible_routes": [
-        "accessibility",
-        "keyboard",
-        "scrolling"
-      ],
-      "selected_route": "accessibility",
-      "change_states": [
-        "loading",
-        "modal",
-        "disabled",
-        "permission_unavailable"
-      ],
+      "state_exemptions": {
+        "selected": "The command is momentary rather than selectable.",
+        "expanded": "The command does not own an expandable disclosure."
+      },
       "accessibility": {
         "identifier": "participant-dedup.menu.scan",
-        "label": "Scan Active Sheet",
-        "role": "AXButton",
-        "required_actions": [
-          "AXPress"
-        ]
+        "label": "Scan active sheet",
+        "role": "button"
+      },
+      "verification_oracle": {
+        "oracle_id": "scan-active-sheet.task-state",
+        "kind": "task_state",
+        "expected_state": "queue_ready",
+        "independent_readback": true
+      },
+      "semantic_evidence": {
+        "stable_identity": {
+          "level": "source_grounded",
+          "claims": {
+            "selector_kind": "data_attribute",
+            "selector_value": "participant-dedup.menu.scan",
+            "scope": "participant-dedup.sidebar",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_ACTION_TARGETS",
+              "evidence_tokens": [
+                "start-scan",
+                "participant-dedup.menu.scan"
+              ]
+            }
+          ]
+        },
+        "correct_semantics": {
+          "level": "source_grounded",
+          "claims": {
+            "role": "button",
+            "accessible_name": "Scan active sheet",
+            "action": "click"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/status.ts",
+              "anchor": "export function renderBootstrap(",
+              "evidence_tokens": [
+                "Scan active sheet",
+                "start-scan"
+              ]
+            }
+          ]
+        },
+        "observable_state": {
+          "level": "source_grounded",
+          "claims": {
+            "property": "data-task-state",
+            "unavailable_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/status.ts",
+              "anchor": "export function renderScanProgress(",
+              "evidence_tokens": [
+                "scan_running",
+                "progressbar"
+              ]
+            }
+          ]
+        },
+        "useful_hierarchy": {
+          "level": "source_grounded",
+          "claims": {
+            "container": "participant-dedup.sidebar",
+            "relationship": "bootstrap > scan-active-sheet button",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "setAttribute(\"role\", \"region\")",
+                "setAttribute(\"aria-labelledby\""
+              ]
+            }
+          ]
+        },
+        "efficient_navigation": {
+          "level": "source_grounded",
+          "claims": {
+            "strategy": "direct_semantic",
+            "entry_point": "participant-dedup.menu.scan"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_ACTION_TARGETS",
+              "evidence_tokens": [
+                "start-scan",
+                "participant-dedup.menu.scan"
+              ]
+            }
+          ]
+        },
+        "verifiable_outcomes": {
+          "level": "source_grounded",
+          "claims": {
+            "readback_provider": "browser_connector",
+            "property": "data-task-state",
+            "operator": "equals",
+            "expected": "queue_ready"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderQueue(",
+              "evidence_tokens": [
+                "queue_ready",
+                "Possible duplicates"
+              ]
+            }
+          ]
+        },
+        "route_flexibility": {
+          "level": "source_grounded",
+          "claims": {
+            "primary_provider": "browser_connector",
+            "secondary_provider": "computer_use",
+            "fallback_policy": "fresh_state_handoff"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function button(",
+              "evidence_tokens": [
+                "el(\"button\"",
+                "data-mac-control-id"
+              ]
+            }
+          ]
+        },
+        "stable_change_behavior": {
+          "level": "source_grounded",
+          "claims": {
+            "scenarios": "loading,modal,disabled,permission_unavailable",
+            "failure_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/sidebar.ts",
+              "anchor": "function showBusy(",
+              "evidence_tokens": [
+                "aria-busy",
+                "renderLoading",
+                "renderError"
+              ]
+            }
+          ]
+        }
       }
     },
     {
+      "surface_kind": "web_content",
+      "focus_policy": "foreground",
+      "foreground_postcondition": "target_foreground",
+      "fallback_policy": "fresh_state_handoff",
+      "change_states": [
+        "loading",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "change_state_exemptions": {
+        "modal": "The sidebar does not use modal overlays; permission and failure states replace the active region."
+      },
+      "navigation_strategy": "direct_semantic",
+      "route_candidates": [
+        {
+          "id": "browser-dom",
+          "provider": "browser_connector",
+          "method": "adapter",
+          "interaction_mode": "semantic"
+        },
+        {
+          "id": "computer-pointer",
+          "provider": "computer_use",
+          "method": "pointer",
+          "interaction_mode": "pointer"
+        }
+      ],
+      "shortcut_acceleration": {
+        "disposition": "not_applicable",
+        "reason": "A container-bound Apps Script sidebar does not expose a stable app-managed shortcut or reversible shortcut customization surface."
+      },
       "task_id": "review-dedup-queue",
       "stable_target_id": "participant-dedup.queue.review",
-      "hierarchy": "participant-dedup > queue > review",
-      "semantic_action": "open Review Sidebar",
-      "observable_postcondition": "Duplicate queue, filters, and decision controls are readable",
+      "hierarchy": "participant-dedup.sidebar > queue review region",
+      "semantic_action": "inspect",
+      "observable_postcondition": "data-task-state equals queue_ready",
       "observable_states": [
-        "enabled",
-        "focused",
-        "selected",
-        "expanded",
         "visible",
         "loading",
         "completed"
       ],
-      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
-      "eligible_routes": [
-        "accessibility",
-        "keyboard",
-        "scrolling"
-      ],
-      "selected_route": "accessibility",
-      "change_states": [
-        "loading",
-        "modal",
-        "disabled",
-        "permission_unavailable"
-      ],
+      "state_exemptions": {
+        "enabled": "The target is a readable task region, not an enableable command.",
+        "focused": "The region contains focusable controls but is not itself a tab stop.",
+        "selected": "The active task region is visible rather than selected.",
+        "expanded": "The task region does not use disclosure state."
+      },
       "accessibility": {
         "identifier": "participant-dedup.queue.review",
-        "label": "Open Review Sidebar",
-        "role": "AXButton",
-        "required_actions": [
-          "AXPress"
-        ]
+        "label": "Possible duplicates",
+        "role": "region"
+      },
+      "verification_oracle": {
+        "oracle_id": "review-dedup-queue.task-state",
+        "kind": "task_state",
+        "expected_state": "queue_ready",
+        "independent_readback": true
+      },
+      "semantic_evidence": {
+        "stable_identity": {
+          "level": "source_grounded",
+          "claims": {
+            "selector_kind": "data_attribute",
+            "selector_value": "participant-dedup.queue.review",
+            "scope": "participant-dedup.sidebar",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "QUEUE",
+                "participant-dedup.queue.review"
+              ]
+            }
+          ]
+        },
+        "correct_semantics": {
+          "level": "source_grounded",
+          "claims": {
+            "role": "region",
+            "accessible_name": "Possible duplicates",
+            "action": "inspect"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderQueue(",
+              "evidence_tokens": [
+                "Possible duplicates",
+                "dd-queue-row"
+              ]
+            }
+          ]
+        },
+        "observable_state": {
+          "level": "source_grounded",
+          "claims": {
+            "property": "data-task-state",
+            "unavailable_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderQueue(",
+              "evidence_tokens": [
+                "queue_ready",
+                "filteredCount"
+              ]
+            }
+          ]
+        },
+        "useful_hierarchy": {
+          "level": "source_grounded",
+          "claims": {
+            "container": "participant-dedup.sidebar",
+            "relationship": "queue review region",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "setAttribute(\"role\", \"region\")",
+                "setAttribute(\"aria-labelledby\""
+              ]
+            }
+          ]
+        },
+        "efficient_navigation": {
+          "level": "source_grounded",
+          "claims": {
+            "strategy": "direct_semantic",
+            "entry_point": "participant-dedup.queue.review"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "QUEUE",
+                "participant-dedup.queue.review"
+              ]
+            }
+          ]
+        },
+        "verifiable_outcomes": {
+          "level": "source_grounded",
+          "claims": {
+            "readback_provider": "browser_connector",
+            "property": "data-task-state",
+            "operator": "equals",
+            "expected": "queue_ready"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderQueue(",
+              "evidence_tokens": [
+                "queue_ready",
+                "readyToApply"
+              ]
+            }
+          ]
+        },
+        "route_flexibility": {
+          "level": "source_grounded",
+          "claims": {
+            "primary_provider": "browser_connector",
+            "secondary_provider": "computer_use",
+            "fallback_policy": "fresh_state_handoff"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "role\", \"region",
+                "data-mac-control-id"
+              ]
+            }
+          ]
+        },
+        "stable_change_behavior": {
+          "level": "source_grounded",
+          "claims": {
+            "scenarios": "loading,modal,disabled,permission_unavailable",
+            "failure_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/sidebar.ts",
+              "anchor": "function showBusy(",
+              "evidence_tokens": [
+                "aria-busy",
+                "renderLoading",
+                "renderError"
+              ]
+            }
+          ]
+        }
       }
     },
     {
+      "surface_kind": "web_content",
+      "focus_policy": "foreground",
+      "foreground_postcondition": "target_foreground",
+      "fallback_policy": "fresh_state_handoff",
+      "change_states": [
+        "loading",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "change_state_exemptions": {
+        "modal": "The sidebar does not use modal overlays; permission and failure states replace the active region."
+      },
+      "navigation_strategy": "direct_semantic",
+      "route_candidates": [
+        {
+          "id": "browser-dom",
+          "provider": "browser_connector",
+          "method": "adapter",
+          "interaction_mode": "semantic"
+        },
+        {
+          "id": "computer-pointer",
+          "provider": "computer_use",
+          "method": "pointer",
+          "interaction_mode": "pointer"
+        }
+      ],
+      "shortcut_acceleration": {
+        "disposition": "not_applicable",
+        "reason": "A container-bound Apps Script sidebar does not expose a stable app-managed shortcut or reversible shortcut customization surface."
+      },
       "task_id": "configure-queue-filters",
       "stable_target_id": "participant-dedup.queue.filters",
-      "hierarchy": "participant-dedup > queue > filters",
-      "semantic_action": "set queue filters",
-      "observable_postcondition": "Selected filters and resulting batch are readable",
+      "hierarchy": "participant-dedup.sidebar > queue filters region",
+      "semantic_action": "change",
+      "observable_postcondition": "data-task-state equals filters_configured",
       "observable_states": [
-        "enabled",
-        "focused",
-        "selected",
-        "expanded",
         "visible",
         "loading",
         "completed"
       ],
-      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
-      "eligible_routes": [
-        "accessibility",
-        "keyboard",
-        "scrolling"
-      ],
-      "selected_route": "accessibility",
-      "change_states": [
-        "loading",
-        "modal",
-        "disabled",
-        "permission_unavailable"
-      ],
+      "state_exemptions": {
+        "enabled": "The target is a readable task region, not an enableable command.",
+        "focused": "The region contains focusable controls but is not itself a tab stop.",
+        "selected": "The active task region is visible rather than selected.",
+        "expanded": "The task region does not use disclosure state."
+      },
       "accessibility": {
         "identifier": "participant-dedup.queue.filters",
-        "label": "Queue Filters",
-        "role": "AXGroup",
-        "required_actions": [
-          "AXFocus"
-        ]
+        "label": "Queue filters",
+        "role": "region"
+      },
+      "verification_oracle": {
+        "oracle_id": "configure-queue-filters.task-state",
+        "kind": "task_state",
+        "expected_state": "filters_configured",
+        "independent_readback": true
+      },
+      "semantic_evidence": {
+        "stable_identity": {
+          "level": "source_grounded",
+          "claims": {
+            "selector_kind": "data_attribute",
+            "selector_value": "participant-dedup.queue.filters",
+            "scope": "participant-dedup.sidebar",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "QUEUE_FILTERS",
+                "participant-dedup.queue.filters"
+              ]
+            }
+          ]
+        },
+        "correct_semantics": {
+          "level": "source_grounded",
+          "claims": {
+            "role": "region",
+            "accessible_name": "Queue filters",
+            "action": "change"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderFilterSettings(",
+              "evidence_tokens": [
+                "Queue filters",
+                "renderQueueFilters"
+              ]
+            }
+          ]
+        },
+        "observable_state": {
+          "level": "source_grounded",
+          "claims": {
+            "property": "data-task-state",
+            "unavailable_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderFilterSettings(",
+              "evidence_tokens": [
+                "filters_ready",
+                "filters_configured"
+              ]
+            }
+          ]
+        },
+        "useful_hierarchy": {
+          "level": "source_grounded",
+          "claims": {
+            "container": "participant-dedup.sidebar",
+            "relationship": "queue filters region",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "setAttribute(\"role\", \"region\")",
+                "setAttribute(\"aria-labelledby\""
+              ]
+            }
+          ]
+        },
+        "efficient_navigation": {
+          "level": "source_grounded",
+          "claims": {
+            "strategy": "direct_semantic",
+            "entry_point": "participant-dedup.queue.filters"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "QUEUE_FILTERS",
+                "participant-dedup.queue.filters"
+              ]
+            }
+          ]
+        },
+        "verifiable_outcomes": {
+          "level": "source_grounded",
+          "claims": {
+            "readback_provider": "browser_connector",
+            "property": "data-task-state",
+            "operator": "equals",
+            "expected": "filters_configured"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/queue.ts",
+              "anchor": "export function renderFilterSettings(",
+              "evidence_tokens": [
+                "filters_configured",
+                "addEventListener(\"change\""
+              ]
+            }
+          ]
+        },
+        "route_flexibility": {
+          "level": "source_grounded",
+          "claims": {
+            "primary_provider": "browser_connector",
+            "secondary_provider": "computer_use",
+            "fallback_policy": "fresh_state_handoff"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "role\", \"region",
+                "data-mac-control-id"
+              ]
+            }
+          ]
+        },
+        "stable_change_behavior": {
+          "level": "source_grounded",
+          "claims": {
+            "scenarios": "loading,modal,disabled,permission_unavailable",
+            "failure_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/sidebar.ts",
+              "anchor": "function showBusy(",
+              "evidence_tokens": [
+                "aria-busy",
+                "renderLoading",
+                "renderError"
+              ]
+            }
+          ]
+        }
       }
     },
     {
+      "surface_kind": "web_content",
+      "focus_policy": "foreground",
+      "foreground_postcondition": "target_foreground",
+      "fallback_policy": "fresh_state_handoff",
+      "change_states": [
+        "loading",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "change_state_exemptions": {
+        "modal": "The sidebar does not use modal overlays; permission and failure states replace the active region."
+      },
+      "navigation_strategy": "direct_semantic",
+      "route_candidates": [
+        {
+          "id": "browser-dom",
+          "provider": "browser_connector",
+          "method": "adapter",
+          "interaction_mode": "semantic"
+        },
+        {
+          "id": "computer-pointer",
+          "provider": "computer_use",
+          "method": "pointer",
+          "interaction_mode": "pointer"
+        }
+      ],
+      "shortcut_acceleration": {
+        "disposition": "not_applicable",
+        "reason": "A container-bound Apps Script sidebar does not expose a stable app-managed shortcut or reversible shortcut customization surface."
+      },
       "task_id": "apply-reviewed-decisions",
       "stable_target_id": "participant-dedup.queue.apply",
-      "hierarchy": "participant-dedup > queue > apply",
-      "semantic_action": "press Apply Reviewed Decisions",
-      "observable_postcondition": "Applied count, unchanged count, and errors are readable",
+      "hierarchy": "participant-dedup.sidebar > apply confirmation > apply button",
+      "semantic_action": "click",
+      "observable_postcondition": "data-task-state equals changes_applied",
       "observable_states": [
         "enabled",
         "focused",
-        "selected",
-        "expanded",
         "visible",
         "loading",
         "completed"
       ],
-      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
-      "eligible_routes": [
-        "accessibility",
-        "keyboard",
-        "scrolling"
-      ],
-      "selected_route": "accessibility",
-      "change_states": [
-        "loading",
-        "modal",
-        "disabled",
-        "permission_unavailable"
-      ],
+      "state_exemptions": {
+        "selected": "The command is momentary rather than selectable.",
+        "expanded": "The command does not own an expandable disclosure."
+      },
       "accessibility": {
         "identifier": "participant-dedup.queue.apply",
-        "label": "Apply Reviewed Decisions",
-        "role": "AXButton",
-        "required_actions": [
-          "AXPress"
-        ]
+        "label": "Apply and delete rows",
+        "role": "button"
+      },
+      "verification_oracle": {
+        "oracle_id": "apply-reviewed-decisions.task-state",
+        "kind": "task_state",
+        "expected_state": "changes_applied",
+        "independent_readback": true
+      },
+      "semantic_evidence": {
+        "stable_identity": {
+          "level": "source_grounded",
+          "claims": {
+            "selector_kind": "data_attribute",
+            "selector_value": "participant-dedup.queue.apply",
+            "scope": "participant-dedup.sidebar",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_ACTION_TARGETS",
+              "evidence_tokens": [
+                "apply",
+                "participant-dedup.queue.apply"
+              ]
+            }
+          ]
+        },
+        "correct_semantics": {
+          "level": "source_grounded",
+          "claims": {
+            "role": "button",
+            "accessible_name": "Apply and delete rows",
+            "action": "click"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/apply.ts",
+              "anchor": "export function renderApplyConfirmation(",
+              "evidence_tokens": [
+                "Apply and delete rows",
+                "confirmation_ready"
+              ]
+            }
+          ]
+        },
+        "observable_state": {
+          "level": "source_grounded",
+          "claims": {
+            "property": "data-task-state",
+            "unavailable_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/apply.ts",
+              "anchor": "export function renderApplyConfirmation(",
+              "evidence_tokens": [
+                "confirmation_required",
+                "confirmation_ready"
+              ]
+            }
+          ]
+        },
+        "useful_hierarchy": {
+          "level": "source_grounded",
+          "claims": {
+            "container": "participant-dedup.sidebar",
+            "relationship": "apply confirmation > apply button",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "setAttribute(\"role\", \"region\")",
+                "setAttribute(\"aria-labelledby\""
+              ]
+            }
+          ]
+        },
+        "efficient_navigation": {
+          "level": "source_grounded",
+          "claims": {
+            "strategy": "direct_semantic",
+            "entry_point": "participant-dedup.queue.apply"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_ACTION_TARGETS",
+              "evidence_tokens": [
+                "apply",
+                "participant-dedup.queue.apply"
+              ]
+            }
+          ]
+        },
+        "verifiable_outcomes": {
+          "level": "source_grounded",
+          "claims": {
+            "readback_provider": "browser_connector",
+            "property": "data-task-state",
+            "operator": "equals",
+            "expected": "changes_applied"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/apply.ts",
+              "anchor": "export function renderApplyResult(",
+              "evidence_tokens": [
+                "changes_applied",
+                "Changes applied"
+              ]
+            }
+          ]
+        },
+        "route_flexibility": {
+          "level": "source_grounded",
+          "claims": {
+            "primary_provider": "browser_connector",
+            "secondary_provider": "computer_use",
+            "fallback_policy": "fresh_state_handoff"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function button(",
+              "evidence_tokens": [
+                "el(\"button\"",
+                "data-mac-control-id"
+              ]
+            }
+          ]
+        },
+        "stable_change_behavior": {
+          "level": "source_grounded",
+          "claims": {
+            "scenarios": "loading,modal,disabled,permission_unavailable",
+            "failure_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/sidebar.ts",
+              "anchor": "function showBusy(",
+              "evidence_tokens": [
+                "aria-busy",
+                "renderLoading",
+                "renderError"
+              ]
+            }
+          ]
+        }
       }
     },
     {
+      "surface_kind": "web_content",
+      "focus_policy": "foreground",
+      "foreground_postcondition": "target_foreground",
+      "fallback_policy": "fresh_state_handoff",
+      "change_states": [
+        "loading",
+        "disabled",
+        "permission_unavailable"
+      ],
+      "change_state_exemptions": {
+        "modal": "The sidebar does not use modal overlays; permission and failure states replace the active region."
+      },
+      "navigation_strategy": "direct_semantic",
+      "route_candidates": [
+        {
+          "id": "browser-dom",
+          "provider": "browser_connector",
+          "method": "adapter",
+          "interaction_mode": "semantic"
+        },
+        {
+          "id": "computer-pointer",
+          "provider": "computer_use",
+          "method": "pointer",
+          "interaction_mode": "pointer"
+        }
+      ],
+      "shortcut_acceleration": {
+        "disposition": "not_applicable",
+        "reason": "A container-bound Apps Script sidebar does not expose a stable app-managed shortcut or reversible shortcut customization surface."
+      },
       "task_id": "view-change-history",
       "stable_target_id": "participant-dedup.history",
-      "hierarchy": "participant-dedup > history",
-      "semantic_action": "open View Change History",
-      "observable_postcondition": "Change-history records and empty state are readable",
+      "hierarchy": "participant-dedup.sidebar > audit history region",
+      "semantic_action": "inspect",
+      "observable_postcondition": "data-task-state equals history_loaded",
       "observable_states": [
-        "enabled",
-        "focused",
-        "selected",
-        "expanded",
         "visible",
         "loading",
         "completed"
       ],
-      "navigation_strategy": "semantic target lookup by stable identifier, accessible role, and label; use semantic scrolling when the target is offscreen",
-      "eligible_routes": [
-        "accessibility",
-        "keyboard",
-        "scrolling"
-      ],
-      "selected_route": "accessibility",
-      "change_states": [
-        "loading",
-        "modal",
-        "disabled",
-        "permission_unavailable"
-      ],
+      "state_exemptions": {
+        "enabled": "The target is a readable task region, not an enableable command.",
+        "focused": "The region contains focusable controls but is not itself a tab stop.",
+        "selected": "The active task region is visible rather than selected.",
+        "expanded": "The task region does not use disclosure state."
+      },
       "accessibility": {
         "identifier": "participant-dedup.history",
-        "label": "View Change History",
-        "role": "AXButton",
-        "required_actions": [
-          "AXPress"
-        ]
+        "label": "Change history",
+        "role": "region"
+      },
+      "verification_oracle": {
+        "oracle_id": "view-change-history.task-state",
+        "kind": "task_state",
+        "expected_state": "history_loaded",
+        "independent_readback": true
+      },
+      "semantic_evidence": {
+        "stable_identity": {
+          "level": "source_grounded",
+          "claims": {
+            "selector_kind": "data_attribute",
+            "selector_value": "participant-dedup.history",
+            "scope": "participant-dedup.sidebar",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "AUDIT_HISTORY",
+                "participant-dedup.history"
+              ]
+            }
+          ]
+        },
+        "correct_semantics": {
+          "level": "source_grounded",
+          "claims": {
+            "role": "region",
+            "accessible_name": "Change history",
+            "action": "inspect"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/history.ts",
+              "anchor": "export function renderHistory(",
+              "evidence_tokens": [
+                "Change history",
+                "data-event-id"
+              ]
+            }
+          ]
+        },
+        "observable_state": {
+          "level": "source_grounded",
+          "claims": {
+            "property": "data-task-state",
+            "unavailable_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/history.ts",
+              "anchor": "export function renderHistory(",
+              "evidence_tokens": [
+                "history_loaded",
+                "filteredCount"
+              ]
+            }
+          ]
+        },
+        "useful_hierarchy": {
+          "level": "source_grounded",
+          "claims": {
+            "container": "participant-dedup.sidebar",
+            "relationship": "audit history region",
+            "uniqueness": "exactly_one"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "setAttribute(\"role\", \"region\")",
+                "setAttribute(\"aria-labelledby\""
+              ]
+            }
+          ]
+        },
+        "efficient_navigation": {
+          "level": "source_grounded",
+          "claims": {
+            "strategy": "direct_semantic",
+            "entry_point": "participant-dedup.history"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export const MAC_CONTROL_VIEW_TARGETS",
+              "evidence_tokens": [
+                "AUDIT_HISTORY",
+                "participant-dedup.history"
+              ]
+            }
+          ]
+        },
+        "verifiable_outcomes": {
+          "level": "source_grounded",
+          "claims": {
+            "readback_provider": "browser_connector",
+            "property": "data-task-state",
+            "operator": "equals",
+            "expected": "history_loaded"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/views/history.ts",
+              "anchor": "export function renderHistory(",
+              "evidence_tokens": [
+                "history_loaded",
+                "recorded changes"
+              ]
+            }
+          ]
+        },
+        "route_flexibility": {
+          "level": "source_grounded",
+          "claims": {
+            "primary_provider": "browser_connector",
+            "secondary_provider": "computer_use",
+            "fallback_policy": "fresh_state_handoff"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/dom.ts",
+              "anchor": "export function view(",
+              "evidence_tokens": [
+                "role\", \"region",
+                "data-mac-control-id"
+              ]
+            }
+          ]
+        },
+        "stable_change_behavior": {
+          "level": "source_grounded",
+          "claims": {
+            "scenarios": "loading,modal,disabled,permission_unavailable",
+            "failure_behavior": "block_and_explain"
+          },
+          "source_refs": [
+            {
+              "path": "src/client/sidebar.ts",
+              "anchor": "function showBusy(",
+              "evidence_tokens": [
+                "aria-busy",
+                "renderLoading",
+                "renderError"
+              ]
+            }
+          ]
+        }
       }
     }
   ]
