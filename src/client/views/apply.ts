@@ -1,7 +1,7 @@
 import type { ApplyResult } from "@/server/apply/applyDecisions";
 import type { CreatedChallenge } from "@/server/apply/preflight";
 import type { BatchSummary } from "@/server/review/summary";
-import { append, button, el, stat, view } from "@/client/dom";
+import { append, button, el, setTaskState, stat, view } from "@/client/dom";
 
 /**
  * §23–§24 The three screens either side of the only operation that deletes
@@ -16,6 +16,7 @@ export interface SummaryHandlers {
 /** §23.1 The whole batch in numbers, before anyone is asked to confirm. */
 export function renderBatchSummary(summary: BatchSummary, handlers: SummaryHandlers): HTMLElement {
   const section = view("BATCH_SUMMARY", "Review summary");
+  setTaskState(section, "summary_ready");
   append(section, el("p", "dd-message", `Sheet: ${summary.sourceSheetName}`));
 
   const stats = el("div", "dd-stats");
@@ -80,6 +81,7 @@ export function renderApplyConfirmation(
   handlers: ConfirmHandlers,
 ): HTMLElement {
   const section = view("APPLY_CONFIRMATION", "Confirm permanent deletion");
+  setTaskState(section, "confirmation_required");
   append(section, el("p", "dd-message", `Sheet: ${summary.sourceSheetName}`));
 
   const stats = el("div", "dd-stats");
@@ -123,6 +125,7 @@ export function renderApplyConfirmation(
 
   field.addEventListener("input", () => {
     apply.disabled = field.value !== expectedText;
+    setTaskState(section, apply.disabled ? "confirmation_required" : "confirmation_ready");
   });
 
   append(section, apply);
@@ -137,6 +140,7 @@ export interface ResultHandlers {
 /** §24 What actually happened, from the run's own counters. */
 export function renderApplyResult(result: ApplyResult, handlers: ResultHandlers): HTMLElement {
   const section = view("APPLY_RESULT", "Changes applied");
+  setTaskState(section, "changes_applied");
 
   const stats = el("div", "dd-stats");
   append(

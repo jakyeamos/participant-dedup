@@ -26,10 +26,34 @@ export function clear(node: Node): void {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+/**
+ * Stable task identities consumed by browser-semantic automation. These are
+ * attached to the real controls and views below, so a task ID is present only
+ * while its actionable surface is present.
+ */
+export const MAC_CONTROL_ACTION_TARGETS: Readonly<Record<string, string>> = {
+  "start-scan": "participant-dedup.menu.scan",
+  apply: "participant-dedup.queue.apply",
+};
+
+export const MAC_CONTROL_VIEW_TARGETS: Readonly<Record<string, string>> = {
+  QUEUE: "participant-dedup.queue.review",
+  QUEUE_FILTERS: "participant-dedup.queue.filters",
+  AUDIT_HISTORY: "participant-dedup.history",
+};
+
+/** A machine-readable postcondition shared by the task target and sidebar root. */
+export function setTaskState(node: HTMLElement, state: string): HTMLElement {
+  node.setAttribute("data-task-state", state);
+  return node;
+}
+
 export function button(label: string, action: string, onClick: () => void): HTMLButtonElement {
   const node = el("button", "dd-button", label);
   node.type = "button";
   node.setAttribute("data-action", action);
+  const macControlId = MAC_CONTROL_ACTION_TARGETS[action];
+  if (macControlId) node.setAttribute("data-mac-control-id", macControlId);
   node.addEventListener("click", onClick);
   return node;
 }
@@ -91,7 +115,14 @@ export function checkedValues(root: ParentNode, name: string): string[] {
 export function view(name: string, heading: string): HTMLElement {
   const section = el("section", "dd-view");
   section.setAttribute("data-view", name);
-  return append(section, el("h2", "dd-heading", heading));
+  const headingNode = el("h2", "dd-heading", heading);
+  const headingId = `view-${name.toLowerCase().replace(/_/g, "-")}-heading`;
+  headingNode.id = headingId;
+  section.setAttribute("role", "region");
+  section.setAttribute("aria-labelledby", headingId);
+  const macControlId = MAC_CONTROL_VIEW_TARGETS[name];
+  if (macControlId) section.setAttribute("data-mac-control-id", macControlId);
+  return append(section, headingNode);
 }
 
 /** A short human phrase for a SCREAMING_CASE code, so the UI reads as prose. */

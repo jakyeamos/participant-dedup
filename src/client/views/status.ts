@@ -1,6 +1,6 @@
 import type { RpcError } from "@/server/rpc/envelope";
 import type { ScanState } from "@/server/scan/scanStateMachine";
-import { append, button, el, humanize, stat, view } from "@/client/dom";
+import { append, button, el, humanize, setTaskState, stat, view } from "@/client/dom";
 import { sanitizeFallbackName } from "@/client/session";
 
 /**
@@ -12,6 +12,7 @@ import { sanitizeFallbackName } from "@/client/session";
 /** Shown immediately on open so the sidebar is never a blank panel while RPCs run. */
 export function renderLoading(message = "Loading…"): HTMLElement {
   const section = view("LOADING", "Participant Deduplication");
+  setTaskState(section, "loading");
   const body = el("div", "dd-loading");
   append(body, progressBar(null));
   append(body, el("p", "dd-message", message));
@@ -30,6 +31,7 @@ export interface ErrorHandlers {
  */
 export function renderError(error: RpcError, handlers: ErrorHandlers): HTMLElement {
   const section = view("ERROR", "Something needs attention");
+  setTaskState(section, "task_failed");
   append(section, el("p", "dd-message", error.message));
   append(section, el("p", "dd-code", humanize(error.code)));
 
@@ -55,6 +57,7 @@ export interface IdentityHandlers {
  */
 export function renderIdentityRequired(handlers: IdentityHandlers): HTMLElement {
   const section = view("IDENTITY_REQUIRED", "Who is reviewing?");
+  setTaskState(section, "permission_required");
   append(
     section,
     el(
@@ -152,6 +155,7 @@ export function renderScanProgress(
   timing: ScanProgressTiming = { elapsedMs: 0 },
 ): HTMLElement {
   const section = view("SCAN_PROGRESS", "Scanning for duplicates");
+  setTaskState(section, "scan_running");
   const percent = phasePercent(state);
   append(section, el("p", "dd-message", `${humanize(state.phase)} · ${percent}%`));
   append(section, progressBar(percent));
@@ -201,6 +205,7 @@ export function renderBootstrap(
   handlers: BootstrapHandlers,
 ): HTMLElement {
   const section = view("BOOTSTRAP", "Participant Deduplication");
+  setTaskState(section, "ready");
   const sheet =
     info.activeSheetName && info.activeSheetName !== ""
       ? info.activeSheetName

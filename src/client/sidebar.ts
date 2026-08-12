@@ -136,6 +136,8 @@ export function mountSidebar(
   boot: SidebarBoot = readBoot(),
   rpc: RpcClient = createRpcClient(googleScriptRunner()),
 ): void {
+  root.setAttribute("data-mac-control-surface", "participant-dedup.sidebar");
+  root.setAttribute("aria-live", "polite");
   const state: SidebarState = {
     boot,
     bootstrap: null,
@@ -151,13 +153,15 @@ export function mountSidebar(
     retry: null,
   };
 
-  function show(node: HTMLElement): void {
+  function show(node: HTMLElement, busy = false): void {
     clear(root);
     root.appendChild(node);
+    root.setAttribute("aria-busy", String(busy));
+    root.setAttribute("data-task-state", node.getAttribute("data-task-state") ?? "ready");
   }
 
   function showBusy(message = "Loading…"): void {
-    show(renderLoading(message));
+    show(renderLoading(message), true);
   }
 
   function fail(thrown: unknown, retry: (() => void) | null = null): void {
@@ -411,6 +415,7 @@ export function mountSidebar(
           },
           { elapsedMs: Date.now() - startedAtMs },
         ),
+        true,
       );
       current = await call<ScanState>("rpcAdvanceScan", {});
       state.batchId = current.batchId;
