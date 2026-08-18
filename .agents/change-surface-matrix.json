@@ -1,0 +1,29 @@
+{
+  "schema_version": "change-surface-matrix/v1",
+  "subject": {"kind": "repository", "id": "participant-dedup"},
+  "owner": "repository-owner",
+  "last_reviewed": "2026-08-18",
+  "surfaces": [
+    {
+      "id": "dedup-engine-and-sidebar",
+      "scope": "local",
+      "path": "src/, packages/, services/, build/, tools/, test/",
+      "owner": "repository-owner",
+      "condition": "matching, review queue, confirmation gate, audit history, or generated Apps Script artifacts change",
+      "operations": ["add", "change", "remove"],
+      "validation": ["pnpm typecheck", "pnpm test", "pnpm build"],
+      "status": "applicable"
+    },
+    {
+      "id": "sheets-and-railway",
+      "scope": "external",
+      "path": "Google Sheets sidebar/add-on, Apps Script, Railway scan service, and service-account boundary",
+      "owner": "integration-owner",
+      "condition": "OAuth scope, deployment manifest, backend request, or workbook mutation path changes",
+      "operations": ["add", "change", "remove"],
+      "validation": ["pnpm build", "synthetic-copy UAT", "authorized Apps Script readback"],
+      "status": "applicable"
+    }
+  ],
+  "unresolved_surfaces": []
+}
