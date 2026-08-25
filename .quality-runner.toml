@@ -1,3 +1,9 @@
 [quality_runner]
 default_profile = "default"
 required_capabilities = ["formatter", "lint", "typecheck", "tests", "build", "dead_code", "runtime_smoke", "pre_pr", "pre_cr"]
+
+[[quality_runner.cache_design.paths]]
+path = "test/build"
+class = "durable_state"
+lifecycle = "durable"
+reason = "Tracked build-test source and fixtures are repository state, not generated build output."
