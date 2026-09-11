@@ -1,0 +1,35 @@
+{
+  "schema": "compass-behavior-inventory/v1",
+  "behaviors": [
+    {
+      "id": "bounded-fuzzy-scan",
+      "title": "Build resumable duplicate candidates with explicit confidence and weak-chain limits",
+      "spec_ref": "README.md",
+      "authority": "accepted"
+    },
+    {
+      "id": "review-without-participant-write",
+      "title": "Save version-bound choices and unchanged-group suppression without applying edits",
+      "spec_ref": "README.md",
+      "authority": "accepted"
+    },
+    {
+      "id": "confirmed-atomic-apply",
+      "title": "Validate exact reviewer challenge and live rows before locked atomic apply and audit",
+      "spec_ref": "README.md",
+      "authority": "accepted"
+    },
+    {
+      "id": "owned-remote-scan",
+      "title": "Run matching through the owned authenticated backend while keeping review/apply local",
+      "spec_ref": "README.md",
+      "authority": "accepted"
+    },
+    {
+      "id": "safe-sidebar-and-local-cli",
+      "title": "Render participant cells as text and support synthetic workbook CLI rehearsal",
+      "spec_ref": "README.md",
+      "authority": "accepted"
+    }
+  ]
+}
