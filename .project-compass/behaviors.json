@@ -30,6 +30,15 @@
       "title": "Render participant cells as text and support synthetic workbook CLI rehearsal",
       "spec_ref": "README.md",
       "authority": "accepted"
+    },
+    {
+      "id": "in-process-scan-auth-and-gateway",
+      "title": "Enforce in-process API key checks and run scan jobs on an in-memory gateway",
+      "spec_ref": "test/server/api/scanApi.test.ts",
+      "oracle_refs": [
+        "test/server/api/scanApi.test.ts"
+      ],
+      "authority": "accepted"
     }
   ]
 }

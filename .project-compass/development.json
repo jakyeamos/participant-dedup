@@ -1,6 +1,6 @@
 {
   "schema": "compass-development/v1",
-  "revision": 1,
+  "revision": 2,
   "inventory": {
     "source": "git-tracked",
     "include": [
@@ -272,7 +272,7 @@
           ],
           "oracle_ref": "test/server/api/scanApi.test.ts",
           "behavior_ids": [
-            "owned-remote-scan"
+            "in-process-scan-auth-and-gateway"
           ]
         },
         {
@@ -297,10 +297,10 @@
         "bounded-fuzzy-scan",
         "review-without-participant-write",
         "confirmed-atomic-apply",
-        "owned-remote-scan",
+        "in-process-scan-auth-and-gateway",
         "safe-sidebar-and-local-cli"
       ],
-      "handoff_review": "One reviewer-controlled deduplication product: normalized snapshots, confidence-bearing matching and conservative clustering feed persistent review; confirmed apply recomputes plans and checks schema/row/decision hashes under a document lock before one Sheets batchUpdate with audit. Low-confidence edges do not merge core components. Railway authenticates scan jobs and persists reviewable progress; Apps Script/sidebar and local XLSX CLI share engine contracts while actual workbook deployment remains separate. README privacy sentence claiming no fetch is stale relative to its own owned-backend introduction, docs/BACKEND.md and remoteScan.ts; retain no third-party matching/no remote sidebar assets, not a fictitious no-network runtime. Exact build, launcher, fixture and runtime support paths are included; their presence is not independent behavioral proof.",
+      "handoff_review": "One reviewer-controlled deduplication product: normalized snapshots, confidence-bearing matching and conservative clustering feed persistent review; confirmed apply recomputes plans and checks schema/row/decision hashes under a document lock before one Sheets batchUpdate with audit. Low-confidence edges do not merge core components. Railway authenticates scan jobs and persists reviewable progress; Apps Script/sidebar and local XLSX CLI share engine contracts while actual workbook deployment remains separate. README privacy sentence claiming no fetch is stale relative to its own owned-backend introduction, docs/BACKEND.md and remoteScan.ts; retain no third-party matching/no remote sidebar assets, not a fictitious no-network runtime. Exact build, launcher, fixture and runtime support paths are included; their presence is not independent behavioral proof. Hosted Railway execution, real Sheets service credentials and local-versus-remote review/apply separation remain unverified; owned-remote-scan remains accepted and unbound.",
       "decision_id": "reviewed-existing-product-association"
     }
   ],
