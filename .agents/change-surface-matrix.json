@@ -1,6 +1,9 @@
 {
   "schema_version": "change-surface-matrix/v1",
-  "subject": {"kind": "repository", "id": "participant-dedup"},
+  "subject": {
+    "kind": "repository",
+    "id": "participant-dedup"
+  },
   "owner": "repository-owner",
   "last_reviewed": "2026-08-18",
   "surfaces": [
@@ -10,8 +13,16 @@
       "path": "src/, packages/, services/, build/, tools/, test/",
       "owner": "repository-owner",
       "condition": "matching, review queue, confirmation gate, audit history, or generated Apps Script artifacts change",
-      "operations": ["add", "change", "remove"],
-      "validation": ["pnpm typecheck", "pnpm test", "pnpm build"],
+      "operations": [
+        "add",
+        "change",
+        "remove"
+      ],
+      "validation": [
+        "pnpm typecheck",
+        "pnpm test",
+        "pnpm build"
+      ],
       "status": "applicable"
     },
     {
@@ -20,9 +31,34 @@
       "path": "Google Sheets sidebar/add-on, Apps Script, Railway scan service, and service-account boundary",
       "owner": "integration-owner",
       "condition": "OAuth scope, deployment manifest, backend request, or workbook mutation path changes",
-      "operations": ["add", "change", "remove"],
-      "validation": ["pnpm build", "synthetic-copy UAT", "authorized Apps Script readback"],
+      "operations": [
+        "add",
+        "change",
+        "remove"
+      ],
+      "validation": [
+        "pnpm build",
+        "synthetic-copy UAT",
+        "authorized Apps Script readback"
+      ],
       "status": "applicable"
+    },
+    {
+      "id": "compass-source-association",
+      "scope": "local",
+      "path": "README.md; .agents/change-surface-matrix.json; .project-compass/development.json; .project-compass/behaviors.json",
+      "owner": "repository-owner",
+      "condition": "Deduplication intent, source ownership or oracle associations change.",
+      "operations": [
+        "add",
+        "change",
+        "remove"
+      ],
+      "validation": [
+        "Review canonical reviewer and privacy boundaries; run source-bound affected proof and authoritative QR; preserve live workbook UAT gaps."
+      ],
+      "status": "applicable",
+      "reviewed_impact": "Metadata only; no matching, workbook, deployment, OAuth or backend changes."
     }
   ],
   "unresolved_surfaces": []

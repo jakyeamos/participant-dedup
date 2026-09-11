@@ -158,3 +158,7 @@ browser session it opens.
 
 See `docs/IMPLEMENTATION_REPORT.md` for dogfood numbers, assumptions, deviations,
 and remaining risks.
+
+## Behavior intent and proof
+
+The approved [product requirements](README.md) are linked to exact source and proof in [Compass](.project-compass/development.json), with change routing in the [surface matrix](.agents/change-surface-matrix.json). Local synthetic fixtures do not establish Apps Script, live Sheets or Railway deployment and reviewer UAT. Production participant data and automatic deletion remain outside this bootstrap.
